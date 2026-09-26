@@ -1,9 +1,9 @@
 # Why memory happens
 
-When a question or difficulty arises, past experience should help us respond,
-even when we did not prepare it for memory or know when we would need it.
-Our current scope is recall in response to that need, without predicting future
-problems or preparing answers in advance.
+When a question, curiosity or difficulty arises, past experience should help us
+explore or respond, even when we did not prepare it for memory or know when we
+would need it. Our current scope starts with that interest or need, without
+predicting future problems or preparing answers in advance.
 
 Ordinary activity leaves traces: conversations, files, revisions, attempts and
 decisions. We want to make those traces useful without giving people or agents
@@ -52,8 +52,8 @@ available when needed. The reader chooses; suggestions need not become commands.
 
 ## Judge usefulness in the work it enables
 
-Can someone resume a thread, recover an applicable lesson or avoid repeating an
-error with less reconstruction by the human? Relevant conditions and caveats
+Can someone resume a thread, find inspiration, recover an applicable lesson or
+avoid repeating an error with less reconstruction by the human? Conditions and caveats
 matter more than finding a similar sentence. Recency and volume alone do not
 establish relevance.
 

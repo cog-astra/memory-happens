@@ -25,6 +25,10 @@ Understanding can be part of the workflow. A powerful model may investigate and
 bring back conclusions, much like a delegated researcher. Its conclusions remain
 interpretations with a route back to their basis, rather than replacements for it.
 
+The purpose can also be inspiration: "What have I read that evokes this kind of
+place?" An associative search can offer material for a new idea without needing
+a problem to solve or a single correct answer.
+
 ## How does this differ from a vector database?
 
 The design choice is whether a source must be ingested into a separate store
@@ -89,11 +93,11 @@ govern what recall can read. Technical reachability alone is not permission.
 
 ## Will it remember things without being asked?
 
-That is outside the current scope. We start with a question or difficulty that
-has already arisen and look for relevant past material. We do not need to predict
-which problem will matter next or prepare a memory for every possible need.
-Associative reminders could be explored separately; they are not required to
-make this approach useful.
+That is outside the current scope. We start with an expressed question, interest
+or difficulty and look for relevant past material. Associative search for an idea
+is compatible with this: it does not require unsolicited reminders. Predicting
+when to offer a reminder could be explored separately; it is not required to make
+this approach useful.
 
 ## Can a result show how far it is from the original?
 
