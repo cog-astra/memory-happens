@@ -6,72 +6,66 @@ Our aim is to make those traces available for later understanding without requir
 a separate act of remembering to write memory down.
 
 This is our design position. The [README](README.md) and issues describe what the
-implementation currently supports and where it falls short.
+implementation currently supports and where it falls short. The [FAQ](FAQ.md)
+explores the implications through concrete questions.
 
 ## Let ordinary work leave richer traces
 
-A file and its creation time tell us that something happened. They say little about
-what prompted it or what the author was trying to achieve. A related request, the
-change itself and the surrounding attempts can make more of that context available.
-
-One direction of development is to retain more of the information already present
-when an action happens, including its connections to other actions. The ordinary
-workflow should carry that context forward. Requiring people to maintain a parallel
-account of their work would undermine this aim.
+A file and its creation time say little about intent. A related request, revision
+and surrounding attempts can supply more context. One direction of development is
+to retain that information and its connections through the ordinary workflow,
+without requiring people to maintain a parallel account of their work.
 
 ## Learn to read the traces
 
-The other direction is to become better at finding, reading and connecting what
-remains. Richer records and better reading are separate problems; improving either
-can help. A reader should distinguish an observed event from an inferred intention.
-When the traces do not support an explanation, the gap should remain visible.
+The other direction is better reading: finding and connecting what remains, while
+distinguishing observed events from inferred intentions. Richer records and better
+reading are separate problems. Unsupported explanations should remain unknowns.
 
-A summary records how someone understood an episode at a particular time. That is
-a useful additional trace, but it selects what mattered to that reader then. Making
-it the sole basis of future recall would bind future questions to that earlier
-selection. We want to preserve the possibility of understanding the past differently
-when a new task makes a previously minor detail relevant.
+A summary records someone's understanding at a particular time. Making it the sole
+basis of recall binds future questions to that earlier selection. We want to retain
+the possibility of new understanding when a task makes a previously minor detail relevant.
 
-## The present gives the past its relevance
+## Recall is a workflow
 
-The same conversation can matter for different reasons on different days. A reader
-may need a decision, its motivation, an abandoned approach, or a useful analogy.
-Sometimes the question itself is still forming.
+We want a source to become usable through a plugin that knows how to read it where
+it already lives: a Git history, a Markdown folder, or another record of activity.
+Loading everything into a separate memory database should be optional.
 
-We therefore want several ways into the traces: time, words, places, changes and
-connections suggested by the reader. Search results and generated topics provide
-leads. Understanding the connection remains work for the reader, who should be able
-to follow a lead, challenge it, or leave it behind.
+Readers expose streams; mappers extract or transform information; reducers select
+or combine it for the task. A recall workflow composes these steps and may change
+direction as it finds evidence. The question itself may still be forming. New ways
+of reading and new compositions should let the system grow.
+
+A local model can participate as a mapper or reducer when its interpretation is
+useful. Ordinary code may be sufficient for other steps. Indexes and caches can
+reduce repeated work. Each is a tool whose value and cost we need to establish.
 
 ## Keep recollection open to correction
 
-A useful recollection should let its reader return to the source and see when and
-in what circumstances it was said or done. A proposal, an experiment and an accepted
-decision carry different weight. Later evidence can change the meaning of an earlier
-statement.
+A faithful record preserves what was said or done, including mistaken beliefs.
+It remains a record of that time as understanding changes. Reading it now introduces
+a new interpretation that can be wrong; this asymmetry matters to how we evaluate
+recall. A proposal, an experiment and an accepted decision carry different weight.
 
-Summaries and interpretations should retain a way back to their evidence, where
-access and retention permit. Conflicting traces and unanswered questions deserve to
-remain visible. An empty search, an unavailable source and a source the reader may
-not access must be distinguishable without exposing protected contents.
+Interpretations should keep a way back to their evidence, where access and retention
+permit. Conflicts and gaps should remain visible. Empty searches, unavailable sources
+and access restrictions must be distinguishable without exposing protected contents.
 
 ## Attention is part of the cost
 
 A result spends the reader's time and context. Start with enough to choose what to
-open, then allow deeper reading. More output should earn its cost through usefulness.
-The same principle applies to the system: every index, model and layer of machinery
-needs a reason to exist. We want complexity to be an explicit engineering choice.
+open, then allow deeper reading. Output and machinery should earn their cost through
+usefulness. We want complexity to be an explicit engineering choice.
 
-Access is also a condition of relevance. The person who owns a trace controls what
-may be shared; being technically reachable does not establish permission. This is
-a design commitment whose enforcement needs testing, with limitations stated openly.
+The owner of a trace controls what may be shared; technical reachability does not
+establish permission. Enforcement needs testing, with limitations stated openly.
 
 ## Judge memory by the work it helps resume
 
-We want to test whether a fresh session can recover a useful thread, preserve its
-meaning and continue the work with less reconstruction by the human. Finding a
-matching phrase is one step toward that outcome. A confident but mistaken account
-is a failure even when retrieval itself worked.
+Can a fresh session recover a useful thread, preserve its meaning and continue work
+with less reconstruction by the human? A confident but mistaken account is a failure
+even when retrieval itself worked.
 
 People and agents using the tool should be able to report those failures, propose
 changes and review each other's work directly. These principles can change too:
