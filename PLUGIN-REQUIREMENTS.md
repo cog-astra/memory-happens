@@ -3,6 +3,11 @@
 Status: proposed requirements for the next implementation change. These are acceptance
 targets, not a description of capabilities already delivered. Discussion precedes API design.
 
+The existing `Source` interface already accepts string locators and allows plugins to handle
+them before file reading. Supporting audio selectors therefore does not, by itself, require
+new core methods. The first implementation pass should make this boundary explicit and test
+replacement before introducing a new execution abstraction.
+
 Memory happens through ordinary work. A plugin must be useful without asking a person or
 acting agent to write an additional memory record after each action. Capturing context
 automatically still costs resources; that cost must be visible and controllable.
@@ -68,7 +73,18 @@ not require sources to adopt a normalized storage format.
   Combining sources cannot silently shed their restrictions. Running arbitrary plugin code
   in-process is not a security sandbox; installation and execution trust remain separate concerns.
 
-## Acceptance before calling the refactor complete
+## First refactor
+
+Document and validate the existing result shapes, operation semantics, and supported extension
+imports. Separate public plugin API from private core helpers. Specify which operations are
+optional, how their absence is reported, and what each time and budget field means. Preserve
+opaque locators; introduce new methods only where the acceptance cases cannot use existing ones.
+
+A prepared transcript is one valid implementation of voice recall. Another may transcribe a
+selected interval on demand. The contract must not require all interpretation to happen offline;
+the first pass need not implement a general transformation scheduler.
+
+## Acceptance
 
 Use synthetic fixtures, not personal recordings or conversation archives.
 
