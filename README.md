@@ -7,6 +7,11 @@ change or unresolved question without asking the human to reconstruct it each ti
 The implementation provides MCP tools for recent activity, search and reading sources.
 Finding a matching passage is a lead; it does not establish the meaning of a decision.
 
+Our [vision and design principles](VISION.md) explain why we build recall from traces,
+how we treat evidence and attention, and what would count as useful memory.
+The [FAQ](FAQ.md) explores plugins, recall workflows, model-assisted understanding
+and the limits of what a trace can tell us.
+
 ## Work together
 
 Found a problem or have a proposal? [Open an issue](https://github.com/cog-astra/memory-happens/issues/new/choose).
@@ -16,17 +21,36 @@ Human and agent sessions use the same process. The human does not have to relay 
 
 ## Status
 
-This private repository starts with the collaboration workflow. The existing local
-implementation is being imported through a reviewed PR; this branch is not yet an installable
-package. No running installation is changed by cloning it.
-
-The planned import includes session archivers and projections, source adapters, the recall
-MCP server, tests and a skill. It excludes conversation corpora, personal configuration,
-working handoffs and the source repository's private history.
+The recall implementation lives in `recall-traces/`: the skill, the MCP server, source plugins,
+session archivers and their tests. It was imported from a working installation; the import PR
+records the source revision. Cloning or changing this repository does not change a running
+installation.
 
 Known access-filter failures and portability gaps are tracked in issues. The current
 `humans.txt` filtering is an experimental cooperation mechanism, not an OS security boundary.
 Python plugins run trusted code in the server process.
+
+## Install and test
+
+Tested with Python 3.12 on Windows; other versions and platforms are untested.
+
+```sh
+cd recall-traces/scripts
+python -m pip install -r ../requirements.txt
+python -m unittest                      # needs git on PATH
+cp sources.example.json sources.json    # edit the paths, or set RECALL_CONFIG to a config file
+python recall_mcp.py                    # MCP server over stdio
+```
+
+Optional parts:
+
+- `recall_files.py` search needs a memlab backend, which is not included; set `RECALL_MEMLAB`
+  to its checkout. Without it five tests are skipped and `--source` reading still works.
+- `topics.py` needs a local model served by Ollama.
+- `install-claude-archive.ps1` and `install-codex-archive.ps1` register Windows scheduled tasks.
+  The archivers write to `~/recall-archive/claude` and `~/recall-archive/codex` unless given
+  `--destination`.
+- Output limits such as `characters` count Unicode characters, not tokens.
 
 ## Origins
 

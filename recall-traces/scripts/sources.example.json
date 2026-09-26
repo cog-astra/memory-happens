@@ -1,0 +1,14 @@
+{
+  "spaces": ["~/Projects"],
+  "sources": [
+    {"plugin": "sessions",
+     "stores": [
+       {"corpus": "~/recall-archive/claude/sessions-corpus", "live": "~/.claude/projects", "archiver": "archive_claude.py"},
+       {"corpus": "~/recall-archive/codex/sessions-corpus", "live": "~/.codex/sessions", "archiver": "archive_codex.py"}
+     ],
+     "service_prefixes": ["<", "# AGENTS.md", "[Request interrupted"]},
+    {"plugin": "memory", "roots": ["~/.claude/projects"]},
+    {"plugin": "notes", "roots": ["~/Notes"]},
+    {"plugin": "git", "discover": ["~/Projects"], "repos": []}
+  ]
+}
