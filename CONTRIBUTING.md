@@ -34,8 +34,8 @@ gh pr create --repo cog-astra/memory-happens --title "WIP: Concrete change" --bo
 gh pr edit --title "Concrete change"
 ```
 
-The import PR must establish the test command and dependencies. Until it lands there is no
-implementation on the default branch to validate. Merging a PR does not update installations;
+The imported implementation's setup and test command are in [README](README.md).
+Merging a PR does not update installations;
 deployment must name and verify the installed revision separately.
 
 ## Review

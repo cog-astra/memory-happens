@@ -28,3 +28,33 @@ again; record IDs cannot retrieve content in a later invocation.
 Parameters, passage text and evidence locators are not automatically included in the runner's
 trace. Trace events contain invocation identity, operation/version, record links and outcome.
 Persistent trace retention is the caller's choice.
+
+## Run the slice
+
+From `recall-traces/scripts`, with the repository's requirements installed:
+
+```sh
+python -m unittest test_operations
+python demo_operations.py
+python demo_operations.py --selector plugins.select_literal
+```
+
+The demo creates and removes its own synthetic repository. It selects the commit removing a
+stale lookup cache, serializes its evidence and reads the patch through a fresh runner. The
+selector module is a trusted Python plugin; replacing it does not change the caller or reader.
+The default query tests composition, not semantic recall or language-model quality.
+
+`Runner.catalog()` returns descriptors; `Runner.invoke()` yields JSON-compatible `record` events
+and one `outcome` event. A consumer stopping early must close the iterator. Trace retention defaults
+to the runner's in-memory list. Blocking Git commands finish before cooperative cancellation is
+observed. Git history currently follows `HEAD`, not every branch. Source access dependencies are
+conservatively accumulated during each call.
+
+The opt-in `git_operations_legacy` source (`repo` setting) routes existing `Recall.recent`,
+`search` and `read` through the operation reader. It is a single-repository migration adapter,
+not a replacement for Git discovery. Existing configured plugins and MCP tools are unchanged.
+The adapter still uses the legacy core's boundary filtering; it does not resolve issue #2.
+The operation runner accepts its own explicit policy callback. No policy file format is required.
+
+Structured MCP exposure and a stable external-plugin API remain subsequent work. This slice
+does not register a server, alter an installed skill, or start a model.
