@@ -86,9 +86,11 @@ call with a fresh runner. A step is `{name, plugin, operation, parameters?, inpu
 port holds the name of an earlier step or a list of complete records. Records move between steps
 inside the call, so the caller does not carry intermediate batches. Policy, evidence, lineage and
 outcomes apply to every step as they do to a single invocation. A step that ends neither in
-`success` nor in `partial` stops the recipe and its outcome becomes the recipe's. Every step that
-ran is summarized: operation, parameters, record count, outcome, and a month-by-month breakdown
-of `context.event_time` that keeps gaps between periods visible.
+`success` nor in `partial` stops the recipe and its outcome becomes the recipe's. Otherwise the
+recipe takes the first `partial` step's outcome, or else the last step's, with its next steps
+and continuation. Every step that ran is summarized: operation, parameters, record count, its
+complete outcome, and a month-by-month breakdown of `context.event_time` that keeps gaps between
+periods visible.
 
 Only the last step's records are returned, projected by `view`: `first_look` (default) gives
 headline, event time and evidence; `passages` gives text, evidence and context; `records` gives
@@ -97,10 +99,11 @@ recipe every record keeps its access dependencies.
 
 `characters` is required and has no default. It bounds the reply's JSON text in Unicode code
 points and counts everything returned, including `trace` and the `size` field itself; structured
-content carries the same object. If records or trace would exceed it, the reply contains neither:
-its outcome is `partial` with code `over_budget`, followed by the would-be size, the record count,
-the largest record and next steps. That diagnostic, like a failure without records, is returned
-even when it is longer than `characters`.
+content carries the same object. If the reply would exceed it, a fixed-shape summary replaces
+it: outcome `partial` with code `over_budget` and next steps, the recipe's status and code, each
+step's name, operation, record count, status and code, and the would-be size with the record
+count and largest record. It never repeats parameters, messages or records. This summary is
+returned even when it alone exceeds a very small `characters`.
 
 The MCP mode collects finite results before returning; it does not stream records to the
 client or propagate MCP cancellation to the synchronous runner. Git history defaults to

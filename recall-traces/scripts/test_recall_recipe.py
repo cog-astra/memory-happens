@@ -5,7 +5,7 @@ from pathlib import Path
 from demo_operations import fixture
 from plugins.git_operations import Plugin as GitReader
 from plugins.select_literal import Plugin as Selector
-from recall_operations import Evidence, Lineage, Record
+from recall_operations import Evidence, Lineage, Operation, Outcome, Passage, Record
 from recall_recipe import run, timeline
 from recall_runner import Runner
 
@@ -56,6 +56,31 @@ class RecipeTest(unittest.TestCase):
              'inputs': {'passages': 'read'}}])
         self.assertEqual((records, outcome.status, outcome.code), ([], 'unsupported', 'incompatible_evidence'))
         self.assertEqual([step['outcome']['status'] for step in steps], ['success', 'success', 'unsupported'])
+
+    def test_outcomes_keep_their_next_steps_and_continuation(self):
+        class Pages:
+            def __init__(self, outcome):
+                self.outcome = outcome
+
+            def catalog(self):
+                return [Operation('page', 'Probe outcomes.')]
+
+            def invoke(self, operation, parameters, inputs, context):
+                yield Passage(text='page one')
+                yield self.outcome
+        finished = Outcome(status='success', code='finished_page', message='Page 1.',
+                           next_steps=['Read page 2.'], continuation={'page': 2})
+        hidden = Outcome(status='partial', code='policy_filtered', message='1 hidden.', next_steps=['Ask for access.'])
+        runner = Runner({'hidden': Pages(hidden), 'finished': Pages(finished)})
+
+        _, steps, outcome = run(runner, [{'name': 'last', 'plugin': 'finished', 'operation': 'page'}])
+        self.assertEqual((outcome.status, outcome.code, outcome.message, outcome.next_steps, outcome.continuation),
+                         ('success', 'finished_page', 'Step last: Page 1.', ['Read page 2.'], {'page': 2}))
+        _, steps, outcome = run(runner, [{'name': 'first', 'plugin': 'hidden', 'operation': 'page'},
+                                         {'name': 'last', 'plugin': 'finished', 'operation': 'page'}])
+        self.assertEqual((outcome.status, outcome.code, outcome.next_steps), ('partial', 'policy_filtered', ['Ask for access.']))
+        self.assertEqual([step['outcome']['next_steps'] for step in steps], [['Ask for access.'], ['Read page 2.']])
+        self.assertEqual(steps[1]['outcome']['continuation'], {'page': 2})
 
     def test_policy_holds_in_any_order_and_through_literal_records(self):
         runner = self.runner(policy=lambda resources: self.guide not in resources)

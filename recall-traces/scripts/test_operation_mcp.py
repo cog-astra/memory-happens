@@ -91,6 +91,15 @@ class OperationMCPTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(tiny['outcome']['code'], 'over_budget')
                 self.assertGreater(len(text), 1)
 
+                echoes = {'absentword': ([{**LOOK[1], 'parameters': {'query': 'absentword' * 3000}, 'inputs': {'passages': []}}], 'success'),
+                          'sensitive-locator': (read({'source': 'git', 'locator': 'sensitive-locator-' * 2000}), 'unsupported')}
+                for echo, (steps, status) in echoes.items():
+                    with self.subTest(echo):
+                        result, text = await self.run_recipe(session, steps, 1000)
+                        self.assertEqual((result['outcome']['code'], result['recipe']['status']), ('over_budget', status))
+                        self.assertLessEqual(len(text), 1000)
+                        self.assertNotIn(echo, text)
+
     async def test_outcomes_stay_distinguishable(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory) / 'repo'

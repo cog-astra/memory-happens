@@ -60,19 +60,25 @@ def project(record, view):
             'evidence': record['evidence']}
 
 
+def brief(outcome):
+    return {key: outcome[key] for key in ('status', 'code')}
+
+
 def over_budget(result, would_be, characters):
+    """A fixed-shape summary: names, counts, statuses and codes, never parameters, messages or records."""
     items = result['records']
     next_steps = [f'Repeat with characters >= {would_be}.']
     if result['view'] != 'first_look':
         next_steps.append('Use the first_look view: headlines and evidence only.')
     if 'trace' in result:
         next_steps.append('Leave out trace.')
-    next_steps.append('Narrow the recipe: lower a step limit, or select before the last step.')
+    next_steps.append('Narrow the recipe: lower a step limit, select before the last step, or shorten parameters.')
     return {
         'outcome': {'status': 'partial', 'code': 'over_budget', 'next_steps': next_steps,
-                    'message': f'Output would be {would_be} characters; characters={characters}. No records were returned.'},
-        'steps': [{key: step[key] for key in ('name', 'operation', 'records')}
-                  | {'outcome': {key: step['outcome'][key] for key in ('status', 'code')}} for step in result['steps']],
+                    'message': f'Output would be {would_be} characters; characters={characters}. Only this summary was returned.'},
+        'recipe': brief(result['outcome']),
+        'steps': [{key: step[key] for key in ('name', 'operation', 'records')} | {'outcome': brief(step['outcome'])}
+                  for step in result['steps']],
         'view': result['view'],
         'size': {'characters': 0, 'limit': characters, 'would_be': would_be, 'records': len(items),
                  'largest_record': max((len(dumps(item)) for item in items), default=0)},
@@ -114,8 +120,8 @@ def create_server(repo, selector='plugins.select_literal'):
             result['trace'] = execution.trace
         result['size'] = {'characters': 0, 'limit': characters}
         text = encode(result)
-        # A reply without records or trace is diagnostics only; it is returned even when longer than the budget.
-        if len(text) > characters and (records or trace):
+        # The fixed-shape summary is returned even when it alone exceeds a very small budget.
+        if len(text) > characters:
             text = encode(over_budget(result, len(text), characters))
         return CallToolResult(content=[TextContent(type='text', text=text)], structured_content=json.loads(text))
 

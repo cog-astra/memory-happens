@@ -9,8 +9,8 @@ MAX_STEPS = 10
 
 class Step(Value):
     name: str = Field(pattern=r'^[A-Za-z0-9_-]{1,40}$')
-    plugin: str
-    operation: str
+    plugin: str = Field(pattern=r'^[A-Za-z0-9_.-]{1,60}$')
+    operation: str = Field(pattern=r'^[A-Za-z0-9_.-]{1,60}$')
     parameters: dict = Field(default_factory=dict)
     inputs: dict[str, str | list[dict]] = Field(default_factory=dict)
 
@@ -48,14 +48,19 @@ def run(runner, steps):
         outcome = Outcome.model_validate(events[-1]['outcome'])
         summaries.append({'name': step.name, 'operation': f'{step.plugin}.{step.operation}',
                           'parameters': step.parameters, 'records': len(records),
-                          'outcome': outcome.model_dump(include={'status', 'code', 'message'}),
-                          'time': timeline(records)})
+                          'outcome': outcome.model_dump(), 'time': timeline(records)})
         if outcome.status not in ('success', 'partial'):
-            return [], summaries, outcome.model_copy(update={'message': f'Step {step.name}: {outcome.message or outcome.code}'})
+            return [], summaries, attributed(step, outcome)
         if outcome.status == 'partial' and partial is None:
-            partial = outcome.model_copy(update={'message': f'Step {step.name}: {outcome.message or outcome.code}'})
+            partial = attributed(step, outcome)
         outputs[step.name] = records
-    return outputs[steps[-1].name], summaries, partial or Outcome(status='success')
+    return outputs[steps[-1].name], summaries, partial or attributed(steps[-1], outcome)
+
+
+def attributed(step, outcome):
+    if outcome.status == 'success' and not outcome.message:
+        return outcome
+    return outcome.model_copy(update={'message': f'Step {step.name}: {outcome.message or outcome.code}'})
 
 
 def timeline(records):
