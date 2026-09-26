@@ -9,7 +9,8 @@ Finding a matching passage is a lead; it does not establish the meaning of a dec
 
 Our [vision and design principles](VISION.md) explain why we build recall from traces,
 how we treat evidence and attention, and what would count as useful memory.
-The [FAQ](FAQ.md) discusses vector databases, ordinary workflows and model-assisted reading.
+The [FAQ](FAQ.md) explores plugins, recall workflows, model-assisted understanding
+and the limits of what a trace can tell us.
 
 ## Work together
 

@@ -1,72 +1,60 @@
 # Why memory happens
 
-Memory happens through ordinary activity. Creating a file, discussing a problem,
-changing an approach or abandoning an attempt leaves information we can return to.
-Our aim is to make those traces available for later understanding without requiring
-a separate act of remembering to write memory down.
+Past experience should help in a new situation even when you did not prepare it
+for memory or know when you would need it.
 
-This is our design position. The [README](README.md) and issues describe what the
-implementation currently supports and where it falls short. The [FAQ](FAQ.md)
-explores the implications through concrete questions.
+Ordinary activity leaves traces: conversations, files, revisions, attempts and
+decisions. We want to make those traces useful without giving people or agents
+another job: maintaining memory. Deliberate notes are welcome, never a prerequisite.
 
-## Let ordinary work leave richer traces
+This is a design direction, not a list of implemented capabilities. The
+[README](README.md) describes implementation status; the [FAQ](FAQ.md) develops
+these principles through examples.
 
-A file and its creation time say little about intent. A related request, revision
-and surrounding attempts can supply more context. One direction of development is
-to retain that information and its connections through the ordinary workflow,
-without requiring people to maintain a parallel account of their work.
+## Leave richer traces; learn to read them
 
-## Learn to read the traces
+These are two directions of work. Retain available context through ordinary tools
+where the cost is justified. Improve how we find, connect and read what remains.
+A new reader can make an old trace useful for a question its author never anticipated.
 
-The other direction is better reading: finding and connecting what remains, while
-distinguishing observed events from inferred intentions. Richer records and better
-reading are separate problems. Unsupported explanations should remain unknowns.
+The circumstances of origin matter: who acted and in what capacity, when, what
+was known, and what question an action answered. Preserve what is available;
+leave gaps as gaps. This is context to recover, not a form everyone must fill in.
 
-A summary records someone's understanding at a particular time. Making it the sole
-basis of recall binds future questions to that earlier selection. We want to retain
-the possibility of new understanding when a task makes a previously minor detail relevant.
+## Recalling and understanding are separate functions
 
-## Recall is a workflow
+A reader can return a passage and its surroundings without explaining them.
+Understanding can happen with the person, the calling agent, or a model inside
+the recall workflow. Simple components should remain useful in richer compositions.
 
-We want a source to become usable through a plugin that knows how to read it where
-it already lives: a Git history, a Markdown folder, or another record of activity.
-Loading everything into a separate memory database should be optional.
+A faithful record can preserve a mistaken belief. Its historical role survives a
+change of mind; our present reading can still be wrong. Keep ways back from an
+interpretation to its evidence, as access and retention permit. A summary is also
+a trace, but making it the only surviving account limits future readings.
 
-Readers expose streams; mappers extract or transform information; reducers select
-or combine it for the task. A recall workflow composes these steps and may change
-direction as it finds evidence. The question itself may still be forming. New ways
-of reading and new compositions should let the system grow.
+## Compose ways of remembering
 
-A local model can participate as a mapper or reducer when its interpretation is
-useful. Ordinary code may be sufficient for other steps. Indexes and caches can
-reduce repeated work. Each is a tool whose value and cost we need to establish.
+Read sources where they live, without mandatory ingestion into a separate memory
+database. Experience should be usable across projects and tools within the sources
+the user has chosen to connect and the access rules of their environment.
 
-## Keep recollection open to correction
+Plugins should contribute replaceable operations: readers expose streams, mappers
+extract or transform material, and reducers select or combine it. Each operation
+describes its inputs, outputs and parameters. A workflow connects compatible
+operations; findings can guide its next step. An agent, a configured route or a
+model within the chain can help decide where to go next.
 
-A faithful record preserves what was said or done, including mistaken beliefs.
-It remains a record of that time as understanding changes. Reading it now introduces
-a new interpretation that can be wrong; this asymmetry matters to how we evaluate
-recall. A proposal, an experiment and an accepted decision carry different weight.
+Tools should reveal useful next steps at the point of use, with more detail
+available when needed. The reader chooses; suggestions need not become commands.
 
-Interpretations should keep a way back to their evidence, where access and retention
-permit. Conflicts and gaps should remain visible. Empty searches, unavailable sources
-and access restrictions must be distinguishable without exposing protected contents.
+## Judge usefulness in the work it enables
 
-## Attention is part of the cost
+Can someone resume a thread, recover an applicable lesson or avoid repeating an
+error with less reconstruction by the human? Relevant conditions and caveats
+matter more than finding a similar sentence. Recency and volume alone do not
+establish relevance.
 
-A result spends the reader's time and context. Start with enough to choose what to
-open, then allow deeper reading. Output and machinery should earn their cost through
-usefulness. We want complexity to be an explicit engineering choice.
-
-The owner of a trace controls what may be shared; technical reachability does not
-establish permission. Enforcement needs testing, with limitations stated openly.
-
-## Judge memory by the work it helps resume
-
-Can a fresh session recover a useful thread, preserve its meaning and continue work
-with less reconstruction by the human? A confident but mistaken account is a failure
-even when retrieval itself worked.
-
-People and agents using the tool should be able to report those failures, propose
-changes and review each other's work directly. These principles can change too:
-experience should give us grounds to revise them.
+Spend attention carefully. A slower reading may be worthwhile if it helps;
+automatic reminders are an optional extension. Evaluate the whole workflow in
+real use, keeping evaluation traces distinguishable from the work being recalled.
+Use those results to revise both the readers and these principles.
