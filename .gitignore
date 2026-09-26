@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.runtime/
+scripts/sources.json
+sources.local.json
+raw/
+revisions/
+sessions-corpus/
+archive/
+*.log
+.env
