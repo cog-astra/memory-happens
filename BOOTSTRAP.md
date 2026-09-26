@@ -91,8 +91,10 @@ commit that removed the cache and explains the reason recorded there. It also sa
 
 ## Beyond the demo
 
-The experimental `--repo` mode can return more history and patch data than an agent can
-practically pass between calls. It is not part of this first-connection path yet.
+The `--repo` mode connects the same tools to a chosen repository, but it is still experimental
+and not part of this first-connection path. A large patch can be read only whole, with a large
+enough `characters`. History over a long repository is slow; see
+[issue #12](https://github.com/cog-astra/memory-happens/issues/12).
 
 Recall over session archives, notes and project memory needs more setup; see
 [Install and test](README.md#install-and-test).
