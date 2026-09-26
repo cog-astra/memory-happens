@@ -48,14 +48,14 @@ def call(runner, plugin, operation, parameters=None, inputs=None):
 
 
 def recall_change(repo, selector):
-    runner = Runner({'git': GitReader('demo', repo), 'selector': selector})
+    runner = Runner({'git': GitReader('demo', repo, access='repository'), 'selector': selector})
     candidates = call(runner, 'git', 'history')
     selected = call(runner, 'selector', 'select', {'query': 'cache stale', 'limit': 1},
                     {'passages': candidates})
     if not selected:
         return {'selection': [], 'patches': [], 'trace': runner.trace}
     evidence = json.loads(json.dumps(selected[0]['evidence'][0]))
-    fresh = Runner({'git': GitReader('demo', repo)})
+    fresh = Runner({'git': GitReader('demo', repo, access='repository')})
     patches = call(fresh, 'git', 'read', {'evidence': evidence})
     return {'selection': selected, 'patches': patches, 'trace': runner.trace + fresh.trace}
 

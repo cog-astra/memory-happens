@@ -1,9 +1,11 @@
 import json
+import subprocess
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
+from unittest.mock import patch
 
 from demo_operations import call, fixture, recall_change
 from plugins.git_operations import Plugin as GitReader
@@ -11,12 +13,37 @@ from plugins.select_literal import Plugin as Selector
 from recall_operations import Evidence, Lineage, Operation, Outcome, Passage, Record, passage
 from recall_runner import Runner
 from recall_core import Recall
+import synthetic_history
 import trigram_selector
 
 
 def external(text='cache', locator='note.md#line=0,1', access=None, id='caller:1'):
     return Record(text=text, evidence=[Evidence(source='notes', locator=locator)], id=id,
                   lineage=Lineage(invocation='caller'), access=access or []).model_dump()
+
+
+def branchy(repo):
+    """A root commit with an unusual path name, a side branch and a merge commit."""
+    def git(*args):
+        return subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Demo', '-c', 'user.email=demo@example.invalid',
+                               '-c', 'commit.gpgsign=false', *args], check=True, capture_output=True,
+                              text=True, encoding='utf-8').stdout.strip()
+    repo.mkdir()
+    git('init', '-q', '--initial-branch=main')
+    odd = repo / 'dir with space' / 'файл №1.txt'
+    odd.parent.mkdir()
+    for path, message in ((odd, 'Root with an unusual name'), (repo / 'side.txt', 'Side change'), (repo / 'main.txt', 'Main change')):
+        if path.name == 'side.txt':
+            git('switch', '-q', '-c', 'side')
+        elif path.name == 'main.txt':
+            git('switch', '-q', 'main')
+        path.write_text(message + '\n', encoding='utf-8')
+        git('add', '.')
+        git('commit', '-q', '-m', message)
+        if path == odd:
+            root = git('rev-parse', 'HEAD')
+    git('merge', '-q', '--no-ff', '-m', 'Merge side', 'side')
+    return root, git('rev-parse', 'HEAD')
 
 
 class OperationTest(unittest.TestCase):
@@ -104,23 +131,66 @@ class OperationTest(unittest.TestCase):
         self.assertEqual(len(denied), 1)
         self.assertEqual(denied[-1]['outcome']['code'], 'access_denied')
 
+    def test_repository_access_reads_one_log_with_the_same_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory).resolve() / 'repo'
+            synthetic_history.build(repo)
+            view = lambda records: [{key: record[key] for key in ('text', 'evidence', 'context')} for record in records]
+            runs = []
+            original = subprocess.run
+            with patch('plugins.git_operations.subprocess.run', lambda *a, **k: runs.append(a[0]) or original(*a, **k)):
+                whole = call(Runner({'git': GitReader('demo', repo, access='repository')}), 'git', 'history', {'limit': None})
+            self.assertEqual(len(runs), 2)
+            paths = call(Runner({'git': GitReader('demo', repo, access='changed_paths')}), 'git', 'history', {'limit': None})
+            self.assertEqual(view(whole), view(paths))
+            self.assertIn('\n\nThe cache key omitted the row revision.', ''.join(record['text'] for record in whole))
+            five = call(Runner({'git': GitReader('demo', repo, access='repository')}), 'git', 'history', {'limit': 5})
+            self.assertEqual(view(five), view(paths)[:5])
+            self.assertTrue(all(record['access'] == [repo.as_posix()] for record in whole))
+            selected = call(Runner({'select': Selector()}), 'select', 'select', {'query': 'stale'}, {'passages': whole})
+            self.assertEqual(selected[0]['access'], [repo.as_posix()])
+
+    def test_changed_paths_access_keeps_roots_merges_unusual_names_and_legacy_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory).resolve() / 'branchy'
+            root, merge = branchy(repo)
+            odd = (repo / 'dir with space' / 'файл №1.txt').as_posix()
+            reader = GitReader('demo', repo, access='changed_paths')
+            records = {record['evidence'][0]['revision']: record for record in call(Runner({'git': reader}), 'git', 'history')}
+            self.assertEqual(records[merge]['access'], sorted([repo.as_posix(), (repo / 'main.txt').as_posix(), (repo / 'side.txt').as_posix()]))
+            self.assertIn(odd, records[root]['access'])
+
+            events = list(Runner({'git': reader}, policy=lambda paths: odd not in paths).invoke('git', 'history'))
+            self.assertEqual(events[-1]['outcome']['code'], 'policy_filtered')
+            self.assertEqual(sorted(event['record']['evidence'][0]['revision'] for event in events if event['type'] == 'record'),
+                             sorted(set(records) - {root}))
+            denied = list(Runner({'git': reader}, policy=lambda paths: odd not in paths).invoke(
+                'git', 'read', {'evidence': {'source': 'demo', 'locator': root}}))
+            self.assertEqual(denied[-1]['outcome']['code'], 'access_denied')
+
+            legacy = Recall({'spaces': [], 'sources': [{'plugin': 'git_operations_legacy', 'repo': str(repo)}]}).plugins[0]
+            self.assertIn(Path(odd), legacy.bound_of(f'{repo.as_posix()}@{root}')['files'])
+            legacy.runner.policy = lambda paths: odd not in paths
+            with self.assertRaises(RuntimeError):
+                legacy.read(f'{repo.as_posix()}@{root}', 1, 10, 1000)
+
     def test_read_checks_policy_after_evidence_roundtrip(self):
         reference = {'source': 'demo', 'locator': self.revisions['rollback']}
         denied_file = (self.repo / 'lookup.py').as_posix()
-        runner = Runner({'git': GitReader('demo', self.repo)}, policy=lambda paths: denied_file not in paths)
+        runner = Runner({'git': GitReader('demo', self.repo, access='changed_paths')}, policy=lambda paths: denied_file not in paths)
         events = list(runner.invoke('git', 'read', {'evidence': json.loads(json.dumps(reference))}))
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]['outcome']['code'], 'access_denied')
 
     def test_consumer_close_records_incomplete_trace(self):
-        runner = Runner({'git': GitReader('demo', self.repo)})
+        runner = Runner({'git': GitReader('demo', self.repo, access='repository')})
         stream = runner.invoke('git', 'history')
         next(stream)
         stream.close()
         self.assertEqual(runner.trace[-1]['code'], 'consumer_closed')
 
     def test_unknown_operation_and_cancel_before_start(self):
-        runner = Runner({'git': GitReader('demo', self.repo)})
+        runner = Runner({'git': GitReader('demo', self.repo, access='repository')})
         self.assertEqual(list(runner.invoke('git', 'missing'))[-1]['outcome']['status'], 'unsupported')
         cancelled = Event()
         cancelled.set()
@@ -177,7 +247,7 @@ class OperationTest(unittest.TestCase):
 
     def test_denied_commit_does_not_hide_older_allowed_commits(self):
         guide = (self.repo / 'GUIDE.md').as_posix()
-        runner = Runner({'git': GitReader('demo', self.repo)}, policy=lambda paths: guide not in paths)
+        runner = Runner({'git': GitReader('demo', self.repo, access='changed_paths')}, policy=lambda paths: guide not in paths)
         events = list(runner.invoke('git', 'history'))
         records = [event['record'] for event in events if event['type'] == 'record']
         self.assertEqual([record['evidence'][0]['revision'] for record in records],

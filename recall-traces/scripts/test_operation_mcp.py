@@ -63,6 +63,19 @@ class OperationMCPTest(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(detail['outcome']['status'], 'success')
                     self.assertIn('The cache key omitted the row revision.', detail['records'][0]['text'])
 
+    async def test_full_history_reaches_a_commit_older_than_the_latest_fifty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / 'repo'
+            facts = await asyncio.to_thread(synthetic_history.build, repo, synthetic_history.PERIODS + (('2025-03', 62),))
+            full = [{**LOOK[0], 'parameters': {'limit': None}}, {**LOOK[1], 'parameters': {'query': 'stale'}}]
+            async with server('--repo', str(repo)) as session:
+                look, text = await self.run_recipe(session, full, 4000)
+                self.assertEqual(look['steps'][0]['outcome']['message'], 'all 100 commits on HEAD.')
+                self.assertEqual([item['evidence'][0]['revision'] for item in look['records']], [facts['revisions']['rollback']])
+                self.assertLessEqual(len(text), 4000)
+                detail, _ = await self.run_recipe(session, read(look['records'][0]['evidence'][0]), 20000, view='passages')
+                self.assertIn('The cache key omitted the row revision.', detail['records'][0]['text'])
+
     async def test_budget_is_required_exact_and_withholds_content(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
