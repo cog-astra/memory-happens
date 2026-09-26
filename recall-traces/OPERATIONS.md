@@ -20,8 +20,14 @@ This prevents edits to its result from mutating the supplied record; it does not
 immutable or enforce semantic fidelity. The slice always uses conservative lineage; plugins
 cannot yet refine it, although the architecture leaves that extension open.
 
-Readers call `context.require(*resolved_resources)` before accessing a resource. Transforms
-receive the conservative union of input access dependencies. These checks constrain trusted
+Readers call `context.require(*resolved_resources)` before accessing a resource; without further
+arguments the resources become dependencies of every later output. A reader that knows which
+output a resource serves passes that output's evidence: `context.require(*resources,
+evidence=evidence)`. Those resources then belong only to outputs carrying that evidence, whenever
+they are yielded, so prefetching keeps them and later items do not inherit them. A refused
+`require` records nothing. Input dependencies and evidence-free requirements always remain on
+every output, so transforms keep the conservative union of their inputs. The runner checks each
+output's access set with the policy before releasing it. These checks constrain trusted
 plugins; they do not sandbox Python. Cancellation is cooperative via `context.cancelled`.
 Policy refusals raise `AccessDenied`, distinct from OS permission failures. A source may skip
 a refused item and report a partial result. Git history does so with `policy_filtered`; a
@@ -59,8 +65,8 @@ before invocation, invalid plugin output is
 `invalid_output`, and unexpected plugin exceptions are `operation_failed`. Input record IDs
 must be distinct across ports. Exceptions are not inferred to be user mistakes or policy refusals.
 Trace retention defaults to the runner's in-memory list. Blocking Git commands finish before cooperative cancellation is
-observed. Git history currently follows `HEAD`, not every branch. Source access dependencies are
-conservatively accumulated during each call.
+observed. Git history currently follows `HEAD`, not every branch. Each history record depends on the
+repository and the paths its own commit changed.
 The reader starts separate Git processes per revision; large-history performance is tracked in
 [issue #12](https://github.com/cog-astra/memory-happens/issues/12).
 

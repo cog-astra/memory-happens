@@ -1,3 +1,4 @@
+import functools
 import importlib
 import json
 from pathlib import Path
@@ -85,6 +86,15 @@ def over_budget(result, would_be, characters):
     }
 
 
+def root_policy(root):
+    """Allows paths inside root. A new policy per call: resolution is cached only for that call,
+    assuming paths and links do not change during it. It is a path check, not an OS sandbox."""
+    @functools.cache
+    def inside(resource):
+        return Path(resource).resolve().is_relative_to(root)
+    return lambda resources: all(inside(resource) for resource in resources)
+
+
 def create_server(repo, selector='plugins.select_literal'):
     root = Path(repo).resolve()
     module = importlib.import_module(selector)
@@ -92,8 +102,7 @@ def create_server(repo, selector='plugins.select_literal'):
     plugins = {'git': GitReader('git', root), 'selector': select}
 
     def runner():
-        return Runner(plugins, policy=lambda resources: all(
-            Path(resource).resolve().is_relative_to(root) for resource in resources))
+        return Runner(plugins, policy=root_policy(root))
 
     server = MCPServer('recall', instructions=INSTRUCTIONS)
 

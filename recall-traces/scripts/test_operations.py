@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -8,7 +9,7 @@ from threading import Event
 from demo_operations import call, fixture, recall_change
 from plugins.git_operations import Plugin as GitReader
 from plugins.select_literal import Plugin as Selector
-from recall_operations import Evidence, Lineage, Operation, Outcome, Passage, Record, passage
+from recall_operations import AccessDenied, Evidence, Lineage, Operation, Outcome, Passage, Record, passage
 from recall_runner import Runner
 from recall_core import Recall
 import trigram_selector
@@ -103,6 +104,60 @@ class OperationTest(unittest.TestCase):
                       .invoke('select', 'select', {'query': 'cache'}, {'passages': inputs}))
         self.assertEqual(len(denied), 1)
         self.assertEqual(denied[-1]['outcome']['code'], 'access_denied')
+
+    def test_history_records_carry_only_their_own_access(self):
+        repo = self.repo.resolve()
+        records = call(Runner({'git': GitReader('demo', repo)}), 'git', 'history')
+        for record in records:
+            revision = record['evidence'][0]['revision']
+            names = subprocess.run(['git', '-C', str(repo), 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', revision],
+                                   capture_output=True, text=True, check=True).stdout.split()
+            self.assertEqual(record['access'], sorted({repo.as_posix()} | {(repo / name).as_posix() for name in names}))
+
+    def test_evidence_scoped_access_survives_prefetch_and_never_carries_over(self):
+        class Prefetching:
+            def catalog(self):
+                return [Operation('read', 'Probe evidence-scoped access.')]
+
+            def invoke(self, operation, parameters, inputs, context):
+                a, b, c = (Evidence(source='probe', locator=name) for name in 'abc')
+                context.require('shared')
+                context.require('b-file', evidence=b)
+                context.require('a-file', evidence=a)
+                try:
+                    context.require('denied-file', evidence=c)
+                except AccessDenied:
+                    pass
+                for evidence in (a, b, c):
+                    yield Passage(text=evidence.locator, evidence=[evidence])
+                yield Outcome(status='success')
+
+        class Unscoped(Prefetching):
+            def invoke(self, operation, parameters, inputs, context):
+                for name in 'ab':
+                    context.require(f'{name}-file')
+                    yield Passage(text=name, evidence=[Evidence(source='probe', locator=name)])
+                yield Outcome(status='success')
+
+        policy = lambda resources: 'denied-file' not in resources
+        scoped = call(Runner({'p': Prefetching()}, policy=policy), 'p', 'read')
+        self.assertEqual([record['access'] for record in scoped],
+                         [['a-file', 'shared'], ['b-file', 'shared'], ['shared']])
+        unscoped = call(Runner({'p': Unscoped()}, policy=policy), 'p', 'read')
+        self.assertEqual([record['access'] for record in unscoped], [['a-file'], ['a-file', 'b-file']])
+
+    def test_root_policy_cache_lasts_one_policy(self):
+        from unittest.mock import patch
+        import operation_mcp
+        seen, root = [], self.repo.resolve()
+        resource = (root / 'lookup.py').as_posix()
+        original = Path.resolve
+        with patch.object(Path, 'resolve', lambda path, *a, **k: seen.append(path) or original(path, *a, **k)):
+            first = operation_mcp.root_policy(root)
+            self.assertTrue(first((resource,)) and first((resource,)))
+            self.assertEqual(len(seen), 1)
+            operation_mcp.root_policy(root)((resource,))
+            self.assertEqual(len(seen), 2)
 
     def test_read_checks_policy_after_evidence_roundtrip(self):
         reference = {'source': 'demo', 'locator': self.revisions['rollback']}

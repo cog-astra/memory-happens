@@ -61,17 +61,34 @@ class Operation:
     version: str = '0.1'
 
 
+def evidence_key(evidence: Evidence):
+    return evidence.source, evidence.locator, evidence.revision, evidence.observed_at
+
+
 @dataclass
 class Context:
     policy: Callable[[tuple[str, ...]], bool]
     cancelled: Event = field(default_factory=Event)
     resources: set[str] = field(default_factory=set)
+    by_evidence: dict[tuple, set[str]] = field(default_factory=dict)
 
-    def require(self, *resources: str):
-        dependencies = self.resources | set(resources)
-        if not self.policy(tuple(sorted(dependencies))):
+    def require(self, *resources: str, evidence: Evidence | None = None):
+        """Without evidence, the resources become dependencies of every later output.
+
+        With evidence, only of outputs carrying that evidence, whenever they are yielded."""
+        held = self.by_evidence.get(evidence_key(evidence), set()) if evidence else set()
+        if not self.policy(tuple(sorted(self.resources | held | set(resources)))):
             raise AccessDenied('Source access denied by configured policy.')
-        self.resources.update(resources)
+        if evidence:
+            self.by_evidence[evidence_key(evidence)] = held | set(resources)
+        else:
+            self.resources.update(resources)
+
+    def access(self, passage: Passage) -> list[str]:
+        dependencies = set(self.resources)
+        for evidence in passage.evidence:
+            dependencies |= self.by_evidence.get(evidence_key(evidence), set())
+        return sorted(dependencies)
 
 
 def passage(record: Record) -> Passage:

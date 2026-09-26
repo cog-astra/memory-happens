@@ -31,10 +31,11 @@ class Plugin:
             raise RuntimeError('Git command failed.')
         return result.stdout
 
-    def require_commit(self, revision, context):
+    def require_commit(self, revision, context, evidence=None):
         context.require(self.repo.as_posix())
         names = self.git('diff-tree', '--root', '-m', '--no-commit-id', '--name-only', '-r', '-z', revision)
-        context.require(*[(self.repo / name).resolve().as_posix() for name in names.split('\0') if name])
+        context.require(*[(self.repo / name).resolve().as_posix() for name in names.split('\0') if name],
+                        evidence=evidence)
 
     def invoke(self, operation, parameters, inputs, context):
         context.require(self.repo.as_posix())
@@ -50,15 +51,14 @@ class Plugin:
                 if context.cancelled.is_set():
                     yield Outcome(status='cancelled')
                     return
+                evidence = Evidence(source=self.source, locator=revision, revision=revision)
                 try:
-                    self.require_commit(revision, context)
+                    self.require_commit(revision, context, evidence)
                 except AccessDenied:
                     hidden += 1
                     continue
                 header, description = self.git('show', '-s', '--format=%aI%n%B', revision).split('\n', 1)
-                yield Passage(text=description,
-                              evidence=[Evidence(source=self.source, locator=revision, revision=revision)],
-                              context={'event_time': header})
+                yield Passage(text=description, evidence=[evidence], context={'event_time': header})
             scope = (f'all {total} commits on HEAD' if len(revisions) == total
                      else f'{len(revisions)} most recent of {total} commits on HEAD')
             if hidden:
@@ -74,7 +74,7 @@ class Plugin:
                     or evidence.revision not in (None, revision)):
                 yield Outcome(status='unsupported', code='incompatible_evidence')
                 return
-            self.require_commit(revision, context)
+            self.require_commit(revision, context, evidence)
             patch = self.git('show', '--no-ext-diff', '--no-textconv', '--format=fuller', '--patch', revision)
             yield Passage(text=patch, evidence=[evidence])
         yield Outcome(status='success')

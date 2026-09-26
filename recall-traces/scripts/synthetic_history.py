@@ -1,5 +1,6 @@
-import os
 import subprocess
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 PERIODS = (('2024-01', 3), ('2024-04', 24), ('2024-07', 6), ('2024-08', 5))
@@ -16,43 +17,48 @@ SPECIAL = {
 }
 
 
-def build(repo):
-    """Commits spread over separated months, overlapping changed paths and one very large patch."""
+def data(text):
+    raw = text.encode('utf-8')
+    return b'data %d\n' % len(raw) + raw + b'\n'
+
+
+def build(repo, periods=PERIODS):
+    """Commits over separated months, with repeated and distinct changed paths and one very large patch.
+
+    One git fast-import stream keeps histories of hundreds of commits quick to create."""
     repo = Path(repo)
     repo.mkdir(parents=True, exist_ok=True)
-
-    def git(*args, when=None):
-        env = {**os.environ, 'GIT_AUTHOR_NAME': 'Demo', 'GIT_AUTHOR_EMAIL': 'demo@example.invalid',
-               'GIT_COMMITTER_NAME': 'Demo', 'GIT_COMMITTER_EMAIL': 'demo@example.invalid'}
-        if when:
-            env.update(GIT_AUTHOR_DATE=when, GIT_COMMITTER_DATE=when)
-        return subprocess.check_output(['git', '-c', 'commit.gpgsign=false', '-c', f'core.hooksPath={repo / "no-hooks"}',
-                                        '-C', str(repo), *args], env=env, stderr=subprocess.PIPE).decode('utf-8').strip()
-
-    git('init', '-q')
-    revisions, months, number = {}, {}, 0
-    for month, count in PERIODS:
+    subprocess.run(['git', 'init', '-q', '--initial-branch=main', str(repo)], check=True)
+    stream, months, names, number = [], {}, {}, 0
+    for month, count in periods:
         for index in range(count):
             number += 1
-            when = f'{month}-{2 + index * 26 // count:02d}T10:00:00+00:00'
+            when = int(datetime(int(month[:4]), int(month[5:]), 2 + index * 26 // count, 10,
+                                tzinfo=timezone.utc).timestamp())
             message = SPECIAL.get((month, index)) or SUBJECTS[number % len(SUBJECTS)].format(area=AREAS[number % len(AREAS)])
-            touched = [FILES[(number * step) % len(FILES)] for step in (1, 7, 13, 19)]
             if message.startswith('Vendor'):
-                touched = ['vendor/pricing/tables.csv']
-                rows = '\n'.join(f'{row},sku-{row:05d},{row * 37 % 1000}.{row % 100:02d},EUR' for row in range(6000))
-                (repo / touched[0]).parent.mkdir(parents=True, exist_ok=True)
-                (repo / touched[0]).write_text(rows + '\n', encoding='utf-8')
+                files = {'vendor/pricing/tables.csv': '\n'.join(
+                    f'{row},sku-{row:05d},{row * 37 % 1000}.{row % 100:02d},EUR' for row in range(6000)) + '\n'}
             else:
-                for path in touched:
-                    (repo / path).parent.mkdir(parents=True, exist_ok=True)
-                    (repo / path).write_text(f'# revision {number}\nVALUE = {number}\n', encoding='utf-8')
-            git('add', '--force', *touched)
-            git('commit', '-q', '-m', message, when=when)
-            revision = git('rev-parse', 'HEAD')
+                touched = [FILES[(number * step) % len(FILES)] for step in (1, 7, 13, 19)] + [f'changes/{number:04d}.md']
+                files = {path: f'# revision {number}\nVALUE = {number}\n' for path in touched}
+            stream += [b'commit refs/heads/main\n', b'mark :%d\n' % number,
+                       b'author Demo <demo@example.invalid> %d +0000\n' % when,
+                       b'committer Demo <demo@example.invalid> %d +0000\n' % when, data(message)]
+            if number > 1:
+                stream.append(b'from :%d\n' % (number - 1))
+            for path, content in files.items():
+                stream += [b'M 100644 inline %s\n' % path.encode(), data(content)]
             months[month] = months.get(month, 0) + 1
             for key, name in (('Cache row', 'cache'), ('Vendor', 'vendor'), ('Remove lookup cache', 'rollback')):
                 if message.startswith(key):
-                    revisions[name] = revision
+                    names[number] = name
+    with tempfile.TemporaryDirectory() as folder:
+        marks = Path(folder) / 'marks'
+        subprocess.run(['git', '-C', str(repo), 'fast-import', '--quiet', f'--export-marks={marks}'],
+                       input=b''.join(stream), check=True)
+        revisions = {names[int(mark[1:])]: sha for mark, sha in
+                     (line.split() for line in marks.read_text().splitlines()) if int(mark[1:]) in names}
     return {'revisions': revisions, 'months': months, 'commits': number}
 
 

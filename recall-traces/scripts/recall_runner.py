@@ -93,18 +93,17 @@ class Runner:
                             if not isinstance(event, Passage):
                                 terminal = Outcome(status='failed', code='invalid_output')
                                 break
-                            context.require(*dependencies)
                             try:
-                                record = Record(
-                                    **Passage.model_validate({key: getattr(event, key) for key in Passage.model_fields}).model_dump(),
-                                    id=f'{invocation}:{count + 1}',
-                                    lineage=Lineage(invocation=invocation, inputs=input_ids),
-                                    access=sorted(context.resources),
-                                )
+                                released = Passage.model_validate({key: getattr(event, key) for key in Passage.model_fields})
+                                access = context.access(released)
+                                record = Record(**released.model_dump(), id=f'{invocation}:{count + 1}',
+                                                lineage=Lineage(invocation=invocation, inputs=input_ids), access=access)
                                 encoded = record.model_dump(mode='json')
                             except (ValidationError, ValueError, TypeError):
                                 terminal = Outcome(status='failed', code='invalid_output')
                                 break
+                            if not self.policy(tuple(access)):
+                                raise AccessDenied('Output access denied by configured policy.')
                             count += 1
                             trace['outputs'].append(record.id)
                             yield {'type': 'record', 'record': encoded}
