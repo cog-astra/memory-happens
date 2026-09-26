@@ -1,7 +1,8 @@
 # First recall
 
-For an agent given this repository's URL and asked to set up recall. The human does not need
-to explain anything else. You check prerequisites and ask the human once. Then you install into
+For an agent given this repository's URL. After a brief explanation, offer the concrete demo
+setup below unless the user asked to stay with a review or discussion. You check prerequisites
+and ask the human once. Only after approval do you install into
 a folder of its own, register a demo server and make a first recall over a synthetic Git history.
 This first connection covers the demo only.
 

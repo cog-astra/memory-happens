@@ -7,9 +7,13 @@ change or unresolved question without asking the human to reconstruct it each ti
 The implementation provides MCP tools for recent activity, search and reading sources.
 Finding a matching passage is a lead; it does not establish the meaning of a decision.
 
-**Try a first recall.** Give an agent (Claude Code or Codex) this repository's URL
-and ask it to set up recall. [BOOTSTRAP.md](BOOTSTRAP.md) tells it what to check and what to ask
-you once before changing anything. It then makes a first recall over a synthetic Git history.
+**Try a first recall.** Give an agent (Claude Code or Codex) this repository's URL.
+[BOOTSTRAP.md](BOOTSTRAP.md) guides the first connection over a synthetic Git history.
+
+**For an agent receiving this link:** briefly explain the project, then use BOOTSTRAP's
+read-only checks to offer a concrete demo setup for approval. Do not require the user to know
+the setup steps or ask a second question to discover them. Install only after approval;
+if the user requested only a review or discussion, stay with that request.
 
 Our [vision and design principles](VISION.md) explain why we build recall from traces,
 how we treat evidence and attention, and what would count as useful memory.
