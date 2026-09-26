@@ -41,6 +41,7 @@ From `recall-traces/scripts`, with the repository's requirements installed:
 python -m unittest test_operations
 python demo_operations.py
 python demo_operations.py --selector plugins.select_literal
+python demo_operations.py --selector trigram_selector
 ```
 
 The demo creates and removes its own synthetic repository. It selects the commit removing a

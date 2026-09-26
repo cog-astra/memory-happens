@@ -11,6 +11,7 @@ from plugins.select_literal import Plugin as Selector
 from recall_operations import Evidence, Lineage, Operation, Outcome, Passage, Record, passage
 from recall_runner import Runner
 from recall_core import Recall
+import trigram_selector
 
 
 def external(text='cache', locator='note.md#line=0,1', access=None):
@@ -26,20 +27,24 @@ class OperationTest(unittest.TestCase):
         self.revisions = fixture(self.repo)
 
     def test_git_selection_and_fresh_read(self):
-        result = recall_change(self.repo, Selector())
-        reference = result['selection'][0]['evidence'][0]
-        self.assertEqual(reference['revision'], self.revisions['rollback'])
-        patch = result['patches'][0]['text']
-        self.assertIn('-cache = {}', patch)
-        self.assertIn('+    return rows.get(key)', patch)
-        self.assertIn('The cache key omitted the row revision.', patch)
-        self.assertEqual(len({item['invocation'] for item in result['trace']}), 3)
+        for selector in (Selector(), trigram_selector):
+            with self.subTest(selector=selector):
+                result = recall_change(self.repo, selector)
+                reference = result['selection'][0]['evidence'][0]
+                self.assertEqual(reference['revision'], self.revisions['rollback'])
+                patch = result['patches'][0]['text']
+                self.assertIn('-cache = {}', patch)
+                self.assertIn('+    return rows.get(key)', patch)
+                self.assertIn('The cache key omitted the row revision.', patch)
+                self.assertEqual(len({item['invocation'] for item in result['trace']}), 3)
 
     def test_selector_preserves_note_and_audio_evidence(self):
         inputs = [external(locator='note.md#line=0,1'), external(locator='speech.wav#t=12.5,20.1')]
-        records = call(Runner({'select': Selector()}), 'select', 'select', {'query': 'cache'}, {'passages': inputs})
-        self.assertEqual([record['evidence'] for record in records], [record['evidence'] for record in inputs])
-        self.assertTrue(all(record['lineage']['input_origin'] == 'caller_supplied' for record in records))
+        for selector in (Selector(), trigram_selector):
+            with self.subTest(selector=selector):
+                records = call(Runner({'select': selector}), 'select', 'select', {'query': 'cache'}, {'passages': inputs})
+                self.assertEqual([record['evidence'] for record in records], [record['evidence'] for record in inputs])
+                self.assertTrue(all(record['lineage']['input_origin'] == 'caller_supplied' for record in records))
 
     def test_passage_edits_do_not_change_its_input(self):
         record = Record.model_validate(external())
