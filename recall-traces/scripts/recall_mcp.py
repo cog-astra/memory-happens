@@ -177,5 +177,35 @@ def create_server():
     return server
 
 
+def main():
+    import argparse
+    import shutil
+    import tempfile
+
+    parser = argparse.ArgumentParser(description='Recall MCP server over stdio. Connect it from an MCP client; --demo needs no source configuration.')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--demo', action='store_true', help='Use a temporary synthetic Git history; no personal sources')
+    mode.add_argument('--repo', type=Path, help='Connect operations to this Git repository only')
+    parser.add_argument('--selector', default='plugins.select_literal', help='Trusted selector module for --demo or --repo')
+    args = parser.parse_args()
+    if (args.demo or args.repo is not None) and shutil.which('git') is None:
+        parser.error('Git is required for --demo and --repo. Install Git and make it available on PATH.')
+    if sys.stdin.isatty():
+        print('This is an MCP stdio server. Register this command in your MCP client; see BOOTSTRAP.md. Waiting for client input.', file=sys.stderr)
+    if args.demo or args.repo is not None:
+        from operation_mcp import create_server as operations
+        if args.demo:
+            from demo_operations import fixture
+            with tempfile.TemporaryDirectory(prefix='recall-demo-') as folder:
+                fixture(folder)
+                operations(folder, args.selector).run()
+        else:
+            if not (args.repo.resolve() / '.git').exists():
+                parser.error('--repo must name a Git working tree (with .git). Try --demo for a synthetic example.')
+            operations(args.repo, args.selector).run()
+    else:
+        create_server().run()
+
+
 if __name__ == '__main__':
-    create_server().run()
+    main()
