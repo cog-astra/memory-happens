@@ -11,24 +11,25 @@ reproduction when available. For a design idea, explain which difficulty it addr
 what observation would tell us it helped. Unknowns are welcome; a proposed solution is optional.
 
 ```sh
-gh issue list --repo cziberpv/memory-happens --state open
-gh issue create --repo cziberpv/memory-happens --title "Short problem statement" --body-file issue.md
+gh issue list --repo cog-astra/memory-happens --state open
+gh issue create --repo cog-astra/memory-happens --title "Short problem statement" --body-file issue.md
 ```
 
 ## Change
 
 Clone this repository into a separate checkout; do not develop in the installed skill directory.
 Use one branch per change, link its issue if there is one, and open a PR with the observed
-before/after behavior, checks performed and remaining limitations. A draft PR is welcome.
+before/after behavior, checks performed and remaining limitations. Until draft PRs are available,
+prefix unfinished PR titles with `WIP:` and remove the prefix when ready for review. Do not merge WIP PRs.
 Do not commit local settings or test recordings from a real user's archive.
 
 ```sh
-git clone https://github.com/cziberpv/memory-happens.git
+git clone https://github.com/cog-astra/memory-happens.git
 cd memory-happens
 git switch -c fix/short-description
 # Make and check the change, then commit it.
 git push -u origin HEAD
-gh pr create --repo cziberpv/memory-happens --draft --title "Concrete change" --body-file pr.md
+gh pr create --repo cog-astra/memory-happens --title "WIP: Concrete change" --body-file pr.md
 ```
 
 The import PR must establish the test command and dependencies. Until it lands there is no
