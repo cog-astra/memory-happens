@@ -4,7 +4,31 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from recall_operations import Context, Lineage, Outcome, Passage, Record
+from recall_operations import AccessDenied, Context, Lineage, Outcome, Passage, Record
+
+
+class InvalidCall(Exception):
+    pass
+
+
+def prepare(descriptor, parameters, inputs):
+    try:
+        values = descriptor.parameters.model_validate(parameters if parameters is not None else {}).model_dump()
+        supplied = inputs if inputs is not None else {}
+        if not isinstance(supplied, dict) or set(supplied) != set(descriptor.inputs):
+            raise InvalidCall('invalid_ports')
+        batches = {}
+        for name, batch in supplied.items():
+            if not isinstance(batch, list):
+                raise InvalidCall('finite_batch_required')
+            batches[name] = [Record.model_validate(item.model_dump() if isinstance(item, Record) else item)
+                             for item in batch]
+    except (ValidationError, ValueError, TypeError) as error:
+        raise InvalidCall('invalid_call') from error
+    ids = [item.id for batch in batches.values() for item in batch]
+    if len(ids) != len(set(ids)):
+        raise InvalidCall('duplicate_input_ids')
+    return values, batches
 
 
 class Runner:
@@ -38,16 +62,7 @@ class Runner:
             else:
                 descriptor = matches[0]
                 trace['version'] = descriptor.version
-                values = descriptor.parameters.model_validate(parameters if parameters is not None else {}).model_dump()
-                supplied = inputs if inputs is not None else {}
-                if not isinstance(supplied, dict) or set(supplied) != set(descriptor.inputs):
-                    raise ValueError('Input ports do not match the operation.')
-                batches = {}
-                for name, batch in supplied.items():
-                    if not isinstance(batch, list):
-                        raise ValueError('Input ports require finite record lists.')
-                    batches[name] = [Record.model_validate(item.model_dump() if isinstance(item, Record) else item)
-                                     for item in batch]
+                values, batches = prepare(descriptor, parameters, inputs)
                 records = [item for batch in batches.values() for item in batch]
                 if descriptor.requires_text and any(item.text is None for item in records):
                     terminal = Outcome(status='unsupported', code='text_required')
@@ -68,32 +83,40 @@ class Runner:
                                 terminal = Outcome(status='failed', code='event_after_outcome')
                                 break
                             if isinstance(event, Outcome):
-                                terminal = event
+                                try:
+                                    terminal = Outcome.model_validate({key: getattr(event, key) for key in Outcome.model_fields})
+                                    terminal.model_dump(mode='json')
+                                except (ValidationError, ValueError, TypeError):
+                                    terminal = Outcome(status='failed', code='invalid_output')
+                                    break
                                 continue
                             if not isinstance(event, Passage):
                                 terminal = Outcome(status='failed', code='invalid_output')
                                 break
                             context.require(*dependencies)
+                            try:
+                                record = Record(
+                                    **Passage.model_validate({key: getattr(event, key) for key in Passage.model_fields}).model_dump(),
+                                    id=f'{invocation}:{count + 1}',
+                                    lineage=Lineage(invocation=invocation, inputs=input_ids),
+                                    access=sorted(context.resources),
+                                )
+                                encoded = record.model_dump(mode='json')
+                            except (ValidationError, ValueError, TypeError):
+                                terminal = Outcome(status='failed', code='invalid_output')
+                                break
                             count += 1
-                            record = Record(
-                                **Passage.model_validate({key: getattr(event, key) for key in Passage.model_fields}).model_dump(),
-                                id=f'{invocation}:{count}',
-                                lineage=Lineage(invocation=invocation, inputs=input_ids),
-                                access=sorted(context.resources),
-                            )
                             trace['outputs'].append(record.id)
-                            yield {'type': 'record', 'record': record.model_dump()}
+                            yield {'type': 'record', 'record': encoded}
                         if terminal is None:
                             terminal = Outcome(status='partial', code='missing_outcome',
                                                next_steps=['Retry the operation or inspect the plugin.'])
-        except (ValidationError, ValueError, TypeError):
-            terminal = Outcome(status='failed', code='invalid_call_or_output',
-                               next_steps=['Inspect catalog parameter and input schemas.'])
-        except PermissionError:
+        except InvalidCall as error:
+            terminal = Outcome(status='failed', code=str(error),
+                               next_steps=['Supply distinct record IDs across all ports.' if str(error) == 'duplicate_input_ids'
+                                           else 'Inspect catalog parameter and input schemas.'])
+        except AccessDenied:
             terminal = Outcome(status='failed', code='access_denied')
-        except FileNotFoundError:
-            terminal = Outcome(status='unavailable', code='dependency_missing',
-                               next_steps=['Check the configured source and its dependencies.'])
         except Exception:
             terminal = Outcome(status='failed', code='operation_failed')
         finally:

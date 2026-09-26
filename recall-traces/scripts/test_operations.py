@@ -14,8 +14,8 @@ from recall_core import Recall
 import trigram_selector
 
 
-def external(text='cache', locator='note.md#line=0,1', access=None):
-    return Record(text=text, evidence=[Evidence(source='notes', locator=locator)], id='caller:1',
+def external(text='cache', locator='note.md#line=0,1', access=None, id='caller:1'):
+    return Record(text=text, evidence=[Evidence(source='notes', locator=locator)], id=id,
                   lineage=Lineage(invocation='caller'), access=access or []).model_dump()
 
 
@@ -39,7 +39,7 @@ class OperationTest(unittest.TestCase):
                 self.assertEqual(len({item['invocation'] for item in result['trace']}), 3)
 
     def test_selector_preserves_note_and_audio_evidence(self):
-        inputs = [external(locator='note.md#line=0,1'), external(locator='speech.wav#t=12.5,20.1')]
+        inputs = [external(locator='note.md#line=0,1'), external(locator='speech.wav#t=12.5,20.1', id='caller:2')]
         for selector in (Selector(), trigram_selector):
             with self.subTest(selector=selector):
                 records = call(Runner({'select': selector}), 'select', 'select', {'query': 'cache'}, {'passages': inputs})
@@ -96,7 +96,7 @@ class OperationTest(unittest.TestCase):
         self.assertEqual(empty[-1]['records'], 0)
 
     def test_access_union_survives_selection_and_denied_input_never_runs(self):
-        inputs = [external(access=['allowed']), external(text='no match', access=['restricted'])]
+        inputs = [external(access=['allowed']), external(text='no match', access=['restricted'], id='caller:2')]
         allowed = call(Runner({'select': Selector()}), 'select', 'select', {'query': 'cache'}, {'passages': inputs})
         self.assertEqual(allowed[0]['access'], ['allowed', 'restricted'])
         denied = list(Runner({'select': Selector()}, policy=lambda paths: 'restricted' not in paths)
@@ -137,6 +137,54 @@ class OperationTest(unittest.TestCase):
         legacy.plugins[0].runner.policy = lambda resources: False
         with self.assertRaises(RuntimeError):
             legacy.read(hits[0]['locator'])
+
+    def test_plugin_faults_do_not_blame_the_call_or_policy(self):
+        class Broken:
+            def catalog(self):
+                return [Operation('read', 'Probe a failing source.')]
+
+            def invoke(self, operation, parameters, inputs, context):
+                yield Passage(text='first')
+                raise self.fault('Internal plugin fault')
+        for fault in (ValueError, TypeError, PermissionError, FileNotFoundError):
+            with self.subTest(fault=fault):
+                plugin = Broken()
+                plugin.fault = fault
+                events = list(Runner({'source': plugin}).invoke('source', 'read'))
+                self.assertEqual(events[-1]['outcome']['code'], 'operation_failed')
+                self.assertEqual(events[-1]['records'], 1)
+
+    def test_invalid_plugin_value_has_its_own_outcome(self):
+        class Broken:
+            def catalog(self):
+                return [Operation('read', 'Probe invalid output.')]
+
+            def invoke(self, operation, parameters, inputs, context):
+                item = Passage(text='initial')
+                item.text = 12
+                yield item
+        events = list(Runner({'source': Broken()}).invoke('source', 'read'))
+        self.assertEqual(events[-1]['outcome']['code'], 'invalid_output')
+        self.assertEqual(events[-1]['records'], 0)
+
+    def test_duplicate_input_ids_are_rejected_before_execution(self):
+        class Spy(Selector):
+            def invoke(self, *args):
+                raise AssertionError('Must not execute')
+        events = list(Runner({'select': Spy()}).invoke('select', 'select', {'query': 'cache'},
+                                                      {'passages': [external(), external()]}))
+        self.assertEqual(events[-1]['outcome']['code'], 'duplicate_input_ids')
+
+    def test_denied_commit_does_not_hide_older_allowed_commits(self):
+        guide = (self.repo / 'GUIDE.md').as_posix()
+        runner = Runner({'git': GitReader('demo', self.repo)}, policy=lambda paths: guide not in paths)
+        events = list(runner.invoke('git', 'history'))
+        records = [event['record'] for event in events if event['type'] == 'record']
+        self.assertEqual([record['evidence'][0]['revision'] for record in records],
+                         [self.revisions[key] for key in ('rollback', 'cache', 'base')])
+        self.assertEqual(events[-1]['outcome']['status'], 'partial')
+        self.assertEqual(events[-1]['outcome']['code'], 'policy_filtered')
+        self.assertTrue(all(guide not in record['access'] for record in records))
 
 
 if __name__ == '__main__':

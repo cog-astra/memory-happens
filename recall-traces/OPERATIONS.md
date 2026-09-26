@@ -23,6 +23,9 @@ cannot yet refine it, although the architecture leaves that extension open.
 Readers call `context.require(*resolved_resources)` before accessing a resource. Transforms
 receive the conservative union of input access dependencies. These checks constrain trusted
 plugins; they do not sandbox Python. Cancellation is cooperative via `context.cancelled`.
+Policy refusals raise `AccessDenied`, distinct from OS permission failures. A source may skip
+a refused item and report a partial result. Git history does so with `policy_filtered`; a
+direct read of denied evidence fails with `access_denied`.
 
 `Passage.context` carries optional source-specific attributes. Evidence identifies a configured
 source and an opaque locator, optionally its revision or observation time. Records returned by
@@ -50,10 +53,15 @@ selector module is a trusted Python plugin; replacing it does not change the cal
 The default query tests composition, not semantic recall or language-model quality.
 
 `Runner.catalog()` returns descriptors; `Runner.invoke()` yields JSON-compatible `record` events
-and one `outcome` event. A consumer stopping early must close the iterator. Trace retention defaults
-to the runner's in-memory list. Blocking Git commands finish before cooperative cancellation is
+and one `outcome` event. A consumer stopping early must close the iterator. Invalid calls fail
+before invocation, invalid plugin output is
+`invalid_output`, and unexpected plugin exceptions are `operation_failed`. Input record IDs
+must be distinct across ports. Exceptions are not inferred to be user mistakes or policy refusals.
+Trace retention defaults to the runner's in-memory list. Blocking Git commands finish before cooperative cancellation is
 observed. Git history currently follows `HEAD`, not every branch. Source access dependencies are
 conservatively accumulated during each call.
+The reader starts separate Git processes per revision; large-history performance is tracked in
+[issue #12](https://github.com/cog-astra/memory-happens/issues/12).
 
 The opt-in `git_operations_legacy` source (`repo` setting) routes existing `Recall.recent`,
 `search` and `read` through the operation reader. It is a single-repository migration adapter,

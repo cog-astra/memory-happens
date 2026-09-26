@@ -47,6 +47,10 @@ class NoParameters(Value):
     pass
 
 
+class AccessDenied(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class Operation:
     name: str
@@ -66,7 +70,7 @@ class Context:
     def require(self, *resources: str):
         dependencies = self.resources | set(resources)
         if not self.policy(tuple(sorted(dependencies))):
-            raise PermissionError('Source access denied by configured policy.')
+            raise AccessDenied('Source access denied by configured policy.')
         self.resources.update(resources)
 
 
