@@ -7,6 +7,9 @@ change or unresolved question without asking the human to reconstruct it each ti
 The implementation provides MCP tools for recent activity, search and reading sources.
 Finding a matching passage is a lead; it does not establish the meaning of a decision.
 
+Our [vision and design principles](VISION.md) explain why we build recall from traces,
+how we treat evidence and attention, and what would count as useful memory.
+
 ## Work together
 
 Found a problem or have a proposal? [Open an issue](https://github.com/cziberpv/memory-happens/issues/new/choose).
