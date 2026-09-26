@@ -30,9 +30,10 @@ Understanding can happen with the person, the calling agent, or a model inside
 the recall workflow. Simple components should remain useful in richer compositions.
 
 A faithful record can preserve a mistaken belief. Its historical role survives a
-change of mind; our present reading can still be wrong. Keep ways back from an
-interpretation to its evidence, as access and retention permit. A summary is also
-a trace, but making it the only surviving account limits future readings.
+change of mind; our present reading can still be wrong. Without its circumstances,
+a past proposal can be mistaken for a current instruction. Keep ways back from
+an interpretation to its evidence, as access and retention permit. A summary is
+also a trace, but making it the only surviving account limits future readings.
 
 ## Compose ways of remembering
 

@@ -32,9 +32,7 @@ before it can participate. A Git history or Markdown folder should be readable
 through a plugin where it already lives.
 
 A vector index can be one search operation in that workflow. Indexes and caches
-may justify their cost by avoiding repeated reading. We do not claim that other
-systems cannot preserve sources or context, or that reading on demand is always
-better. We want the choice to remain open.
+may justify their cost by avoiding repeated reading.
 
 ## What can a plugin contribute?
 
@@ -88,8 +86,6 @@ detail when needed, without revealing protected contents.
 No. It is a convention used in our development environment, not a universal
 requirement. Source selection and the user's existing access policies should
 govern what recall can read. Technical reachability alone is not permission.
-The implementation's current access-filter limitations belong in its status and
-issue reports.
 
 ## Will it remember things without being asked?
 
@@ -116,10 +112,3 @@ overviews. Depth helps the reader choose whether to inspect earlier material;
 it imposes no automatic cutoff. Counting rules for mixed results and branching
 chains remain to be tested. The mechanism should derive the indicator from the
 actual result and its lineage, without asking someone to maintain it by hand.
-
-## Can an old record become stale?
-
-It remains evidence of what was recorded then, not automatically advice for now.
-A past decision may have been superseded, and a faithful record may contain a
-mistake. Read it with its circumstances and later evidence. Historical framing
-makes revision possible; it does not make the present interpretation infallible.
