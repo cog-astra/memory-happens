@@ -25,7 +25,7 @@ class RecipeTest(unittest.TestCase):
         self.guide = (self.repo / 'GUIDE.md').as_posix()
 
     def runner(self, policy=None):
-        return Runner({'git': GitReader('demo', self.repo), 'select': Selector()}, policy=policy)
+        return Runner({'git': GitReader('demo', self.repo, access='changed_paths'), 'select': Selector()}, policy=policy)
 
     def test_records_flow_between_steps_inside_the_call(self):
         records, steps, outcome = run(self.runner(), history_then_select('stale'))

@@ -59,10 +59,16 @@ before invocation, invalid plugin output is
 `invalid_output`, and unexpected plugin exceptions are `operation_failed`. Input record IDs
 must be distinct across ports. Exceptions are not inferred to be user mistakes or policy refusals.
 Trace retention defaults to the runner's in-memory list. Blocking Git commands finish before cooperative cancellation is
-observed. Git history currently follows `HEAD`, not every branch. Source access dependencies are
-conservatively accumulated during each call.
-The reader starts separate Git processes per revision; large-history performance is tracked in
-[issue #12](https://github.com/cog-astra/memory-happens/issues/12).
+observed. Git history currently follows `HEAD`, not every branch.
+
+The Git reader takes an explicit access mode wherever it is connected. With `access='repository'`,
+the policy is checked for the repository as a whole, history is read with one `git log`, and every
+record depends on the repository only; `--demo` and `--repo` use it. With `access='changed_paths'`,
+the policy is also checked for every path each commit changed, for policies that distinguish paths
+inside a repository, such as the legacy adapter's boundaries. That mode starts Git processes per
+revision and accumulates dependencies during a call
+([issue #12](https://github.com/cog-astra/memory-happens/issues/12)).
+The lineage, trace and envelope kept for other outputs were not measured separately.
 
 The opt-in `git_operations_legacy` source (`repo` setting) routes existing `Recall.recent`,
 `search` and `read` through the operation reader. It is a single-repository migration adapter,
@@ -75,8 +81,8 @@ The operation runner accepts its own explicit policy callback. No policy file fo
 `python recall_mcp.py --demo` serves a temporary synthetic Git history. It exposes only
 `operation_catalog` and `operation_run`; no personal source configuration is read.
 `--repo /absolute/path/to/repository` connects the same tools to a chosen working tree.
-It remains experimental: a patch larger than the caller's budget can be read only whole, and
-history starts separate Git processes per commit ([issue #12](https://github.com/cog-astra/memory-happens/issues/12)).
+Its access boundary is the whole selected repository. It remains experimental: a patch larger
+than the caller's budget can be read only whole.
 `--selector trigram_selector` replaces the default selector in either mode.
 Without either mode flag, the existing `recent`, `search` and `read` tools remain available.
 See [first connection](../BOOTSTRAP.md) for client setup.

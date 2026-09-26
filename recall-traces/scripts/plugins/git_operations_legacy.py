@@ -12,7 +12,7 @@ class Plugin(Source):
 
     def __init__(self, options):
         super().__init__(options)
-        self.reader = Reader(options.get('source', 'git'), options['repo'])
+        self.reader = Reader(options.get('source', 'git'), options['repo'], access='changed_paths')
         self.runner = Runner({'git': self.reader})
 
     def records(self, operation, parameters):

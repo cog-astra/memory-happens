@@ -89,7 +89,7 @@ def create_server(repo, selector='plugins.select_literal'):
     root = Path(repo).resolve()
     module = importlib.import_module(selector)
     select = module if callable(getattr(module, 'catalog', None)) and callable(getattr(module, 'invoke', None)) else module.Plugin()
-    plugins = {'git': GitReader('git', root), 'selector': select}
+    plugins = {'git': GitReader('git', root, access='repository'), 'selector': select}
 
     def runner():
         return Runner(plugins, policy=lambda resources: all(

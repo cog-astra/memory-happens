@@ -15,10 +15,18 @@ class Read(Value):
     evidence: Evidence
 
 
+ACCESS = ('repository', 'changed_paths')
+
+
 class Plugin:
-    def __init__(self, source, repo):
+    def __init__(self, source, repo, *, access):
+        """access='repository' checks policy for the repository as a whole; 'changed_paths' also
+        for every path a commit changed, for policies that distinguish paths inside it."""
+        if access not in ACCESS:
+            raise ValueError(f'access must be one of {ACCESS}')
         self.source = source
         self.repo = Path(repo).resolve()
+        self.access = access
 
     def catalog(self):
         return [Operation('history', 'Read commit descriptions from the configured repository.', History),
@@ -43,24 +51,30 @@ class Plugin:
             return
         if operation == 'history':
             limit = [f'--max-count={parameters["limit"]}'] if parameters['limit'] is not None else []
-            revisions = self.git('rev-list', *limit, 'HEAD').splitlines()
             total = int(self.git('rev-list', '--count', 'HEAD'))
+            if self.access == 'repository':
+                fields = self.git('log', '-z', '--format=%H%x00%aI%x00%B', *limit, 'HEAD').split('\0')
+                # git show ends each description with one more newline than git log -z; keep the texts equal.
+                commits = [(fields[i], fields[i + 1], fields[i + 2] + '\n') for i in range(0, len(fields) - 2, 3)]
+            else:
+                commits = [(revision, None, None) for revision in self.git('rev-list', *limit, 'HEAD').splitlines()]
             hidden = 0
-            for revision in revisions:
+            for revision, moment, description in commits:
                 if context.cancelled.is_set():
                     yield Outcome(status='cancelled')
                     return
-                try:
-                    self.require_commit(revision, context)
-                except AccessDenied:
-                    hidden += 1
-                    continue
-                header, description = self.git('show', '-s', '--format=%aI%n%B', revision).split('\n', 1)
+                if self.access == 'changed_paths':
+                    try:
+                        self.require_commit(revision, context)
+                    except AccessDenied:
+                        hidden += 1
+                        continue
+                    moment, description = self.git('show', '-s', '--format=%aI%n%B', revision).split('\n', 1)
                 yield Passage(text=description,
                               evidence=[Evidence(source=self.source, locator=revision, revision=revision)],
-                              context={'event_time': header})
-            scope = (f'all {total} commits on HEAD' if len(revisions) == total
-                     else f'{len(revisions)} most recent of {total} commits on HEAD')
+                              context={'event_time': moment})
+            scope = (f'all {total} commits on HEAD' if len(commits) == total
+                     else f'{len(commits)} most recent of {total} commits on HEAD')
             if hidden:
                 yield Outcome(status='partial', code='policy_filtered',
                               message=f'{scope}; {hidden} excluded by the configured access policy.')
@@ -74,7 +88,8 @@ class Plugin:
                     or evidence.revision not in (None, revision)):
                 yield Outcome(status='unsupported', code='incompatible_evidence')
                 return
-            self.require_commit(revision, context)
-            patch = self.git('show', '--no-ext-diff', '--no-textconv', '--format=fuller', '--patch', revision)
+            if self.access == 'changed_paths':
+                self.require_commit(revision, context)
+            patch =self.git('show', '--no-ext-diff', '--no-textconv', '--format=fuller', '--patch', revision)
             yield Passage(text=patch, evidence=[evidence])
         yield Outcome(status='success')
