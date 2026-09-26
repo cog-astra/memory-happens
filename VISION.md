@@ -1,7 +1,9 @@
 # Why memory happens
 
-Past experience should help in a new situation even when you did not prepare it
-for memory or know when you would need it.
+When a question or difficulty arises, past experience should help us respond,
+even when we did not prepare it for memory or know when we would need it.
+Our current scope is recall in response to that need, without predicting future
+problems or preparing answers in advance.
 
 Ordinary activity leaves traces: conversations, files, revisions, attempts and
 decisions. We want to make those traces useful without giving people or agents
@@ -54,7 +56,7 @@ error with less reconstruction by the human? Relevant conditions and caveats
 matter more than finding a similar sentence. Recency and volume alone do not
 establish relevance.
 
-Spend attention carefully. A slower reading may be worthwhile if it helps;
-automatic reminders are an optional extension. Evaluate the whole workflow in
-real use, keeping evaluation traces distinguishable from the work being recalled.
+Spend attention carefully. A slower reading may be worthwhile if it helps.
+Evaluate the whole workflow in real use, keeping evaluation traces distinguishable
+from the work being recalled.
 Use those results to revise both the readers and these principles.

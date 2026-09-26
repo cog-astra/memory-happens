@@ -93,9 +93,11 @@ issue reports.
 
 ## Will it remember things without being asked?
 
-Associative reminders are a possible extension. The core can be useful when
-someone explicitly asks. Recognizing a useful occasion to recall is a separate
-problem from reading well once asked; unsolicited reminders also spend attention.
+That is outside the current scope. We start with a question or difficulty that
+has already arisen and look for relevant past material. We do not need to predict
+which problem will matter next or prepare a memory for every possible need.
+Associative reminders could be explored separately; they are not required to
+make this approach useful.
 
 ## Can a result show how far it is from the original?
 
