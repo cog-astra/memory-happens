@@ -13,7 +13,7 @@ The [FAQ](FAQ.md) discusses vector databases, ordinary workflows and model-assis
 
 ## Work together
 
-Found a problem or have a proposal? [Open an issue](https://github.com/cziberpv/memory-happens/issues/new/choose).
+Found a problem or have a proposal? [Open an issue](https://github.com/cog-astra/memory-happens/issues/new/choose).
 Describe what you tried, what happened and what would help. A patch is optional.
 For an implementation, open a branch and a pull request; see [CONTRIBUTING.md](CONTRIBUTING.md).
 Human and agent sessions use the same process. The human does not have to relay reports.

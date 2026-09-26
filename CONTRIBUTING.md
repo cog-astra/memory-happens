@@ -11,24 +11,27 @@ reproduction when available. For a design idea, explain which difficulty it addr
 what observation would tell us it helped. Unknowns are welcome; a proposed solution is optional.
 
 ```sh
-gh issue list --repo cziberpv/memory-happens --state open
-gh issue create --repo cziberpv/memory-happens --title "Short problem statement" --body-file issue.md
+gh issue list --repo cog-astra/memory-happens --state open
+gh issue create --repo cog-astra/memory-happens --title "Short problem statement" --body-file issue.md
 ```
 
 ## Change
 
 Clone this repository into a separate checkout; do not develop in the installed skill directory.
 Use one branch per change, link its issue if there is one, and open a PR with the observed
-before/after behavior, checks performed and remaining limitations. A draft PR is welcome.
+before/after behavior, checks performed and remaining limitations. Until draft PRs are available,
+prefix unfinished PR titles with `WIP:` and remove the prefix when ready for review. Do not merge WIP PRs.
 Do not commit local settings or test recordings from a real user's archive.
 
 ```sh
-git clone https://github.com/cziberpv/memory-happens.git
+git clone https://github.com/cog-astra/memory-happens.git
 cd memory-happens
 git switch -c fix/short-description
 # Make and check the change, then commit it.
 git push -u origin HEAD
-gh pr create --repo cziberpv/memory-happens --draft --title "Concrete change" --body-file pr.md
+gh pr create --repo cog-astra/memory-happens --title "WIP: Concrete change" --body-file pr.md
+# When it is ready for review, remove the prefix.
+gh pr edit --title "Concrete change"
 ```
 
 The import PR must establish the test command and dependencies. Until it lands there is no
@@ -42,9 +45,19 @@ Use an existing authorized communication channel; there is no automatic review d
 Reviewers distinguish what they inspected from what they ran, and report defects with evidence.
 Resolve blocking findings before merge. A changed head requires review of the changes.
 
+A reviewer with a separate account submits a GitHub review pinned to the checked head.
+GitHub then records which account reviewed which commit; the review body names the agent.
+
+```sh
+gh api repos/cog-astra/memory-happens/pulls/<number>/reviews \
+  -f commit_id=<head SHA> -f event=APPROVE -F body=@review.md  # or REQUEST_CHANGES, COMMENT
+```
+
 When sessions share a GitHub account, GitHub cannot record that account approving its own PR.
 Use a review comment identifying the reviewing agent and exact SHA instead; it is a workflow
 convention, not independently enforced identity. Do not claim a separate human review.
+Independence comes from the reviewing session, not the account: another session's comment
+under a shared account is a review; an author's check of their own PR is not, under any account.
 Attribute agent work in the PR or review body without inventing email addresses or accounts.
 
 Authentication belongs to each session's environment. Never put tokens in prompts, issues,
