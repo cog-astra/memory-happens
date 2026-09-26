@@ -33,15 +33,15 @@ exchange format. Existing `recent`, `search` and `read` remain usable during mig
 ## Operation contract
 
 A plugin exports a catalog and an invocation entry point. Start with in-process Python and
-asynchronous streams: a trusted extension API, not a sandbox or a cross-language execution
-protocol. Blocking readers can be adapted without rewriting their internals.
+ordinary generators: a trusted extension API, not a sandbox or a cross-language execution
+protocol. Async adapters can be added where needed; plugin authors need not adopt asyncio.
 
 | Descriptor | Meaning |
 | --- | --- |
 | Name and API version | Stable operation identity and implemented contract. |
 | Purpose | Short point-of-use description; fuller help available on demand. |
 | Parameters | JSON Schema, including defaults. Lines and seconds belong here when applicable. |
-| Inputs and output | Named ports with versioned payload schemas. A source may have no inputs. |
+| Inputs and output | Named ports using the shared passage format in the first slice. A source may have no inputs. |
 | Dependencies | Required configuration or services, availability and usable recovery steps. |
 
 Configuration binds a caller-facing alias to an implementation and its settings. Replacement
@@ -50,9 +50,12 @@ Reject incompatible connections before running them. Report unsupported operatio
 plugins need not supply empty methods for capabilities they lack. External plugins import a
 small public API, not private core helpers.
 
-Start with exact port-schema compatibility and explicit adapter operations. Similar-looking JSON
-objects do not imply semantic compatibility. Introduce concrete payload schemas as operations
-need them; the first slice does not require a universal taxonomy of knowledge.
+The first shared payload is a **passage**: optional text plus evidence. Git descriptions, notes
+and transcripts can all supply it; a selector reads text and passes evidence through without
+knowing the source type. Additional source-specific fields are opaque extensions. Operations
+declare prerequisites such as needing text, and reject unsupported inputs explicitly.
+Introduce another payload contract only when an operation needs it; do not create a distinct
+schema for every reader or silently turn all material into text.
 
 ## Records and source references
 
@@ -62,10 +65,10 @@ or binary material instead of copying it into every record.
 
 | Envelope field | Meaning |
 | --- | --- |
-| Record ID | Identity within the run, assigned by the runner. |
+| Record ID | Identity within an invocation, assigned by the runner; never a cross-call lookup handle. |
 | Payload | Value or artifact reference described by the output schema. |
 | Evidence | References for revisiting the available underlying material. |
-| Lineage | Input record IDs and producing operation call; several inputs are possible. |
+| Lineage | Producing call and its input records/references; several inputs are possible. |
 | Context | Available origin attributes with explicit meanings: actor, event time, capture time, etc. Unknown values may be absent. |
 
 A source reference names a configured source alias, an opaque locator and, when available,
@@ -74,14 +77,46 @@ The source reader interprets it; the runner must not assume a filesystem path. A
 reader supports its advertised locator contract or reports incompatibility. Old addresses
 must not silently acquire different meanings.
 
+Use existing addressing vocabularies where they fit: the [Web Annotation model](https://www.w3.org/TR/annotation-model/#specific-resources)
+separates source, selector and state. [Media Fragments](https://www.w3.org/TR/media-frags/#naming-time)
+express time intervals, and [RFC 5147](https://www.rfc-editor.org/rfc/rfc5147#section-2.1)
+expresses plain-text positions and ranges. Its line positions are zero-based boundaries, unlike
+the current one-based `start` parameter; adapters must convert explicitly. TextQuoteSelector can
+anchor a quote using surrounding text, but does not guarantee a unique match after edits.
+TimeState describes the relevant source state; it is not a promise that a historical copy exists.
+These are reusable forms for readers, not a requirement to implement all of Web Annotation.
+
 Lineage describes the actual output relationship: selected or quoted material, transformed content,
 or unknown. A model call does not automatically mean paraphrasing. A transcript links to its audio;
 two transcripts share that origin. Summaries may be summarized. Preserve these links before
 adding a depth display; do not invent a trust score or require every graph to compress to a number.
 
+By default the runner records every input of the call as a possible dependency and labels the
+relationship unknown. This is a conservative record of material available to the operation,
+not an assertion that every input supports its output. A plugin may identify a narrower lineage
+or a more precise relation, but need not do so. Such claims do not remove access dependencies.
+
 Event, modification and processing times stay distinct. Missing event time must not become file
 modification time under the same label. Unversioned sources do not imply repeatable reads;
 detectable source changes are reported when revisiting them.
+
+## Across MCP calls
+
+An invocation is one operation call. A workflow may span several independent MCP calls.
+The caller passes records by value to transformations and evidence references to readers;
+there is no hidden server-side run handle whose lifetime it must manage. For example, selection
+returns passages with evidence; the next `read` passes the chosen evidence, not a record ID.
+
+Invocation IDs and optional content digests can connect traces. A digest identifies supplied
+bytes; it does not authenticate their origin. Returned provenance is a caller-supplied claim
+unless checked against a retained trace or source. Source references are resolved and access
+is checked again on each read. Edited text without a verifiable origin remains an external
+input with unknown provenance, rather than inheriting a claimed trusted history.
+
+The first transform calls take finite batches so input dependencies can be collected and checked
+before output is released. Readers can yield incrementally; callers choose batch sizes instead
+of materializing an entire corpus. Repeated serialization can cost tokens; handles or a persistent
+artifact service require a measured need and explicit lifetime rules before being added.
 
 ## Execution and outcomes
 
@@ -104,15 +139,17 @@ separately; provenance does not require saving every private input body. Credent
 enter trace output. Unretained, changed or inaccessible inputs can limit later reconstruction.
 
 The initial API shape is `catalog()` plus `invoke(operation, parameters, inputs, context)`.
-`inputs` maps port names to record streams; `context` supplies cancellation, the configured policy
-and run-local artifact/trace services. Invocation returns an asynchronous stream of record events
-and one terminal event. These are responsibilities to prove in the slice, not frozen Python
-signatures. A second independently implemented plugin is required before freezing them.
+`inputs` maps port names to record batches in the first slice; `context` supplies cancellation,
+the configured policy and trace services. Invocation yields record events and one terminal event.
+These are responsibilities to prove, not frozen Python signatures. A second independently
+implemented plugin is required before freezing them.
 
 Connected sources and the environment's access policy apply to reads and derived output.
 Readers resolve source-specific resources; policy adapters check them. The runner carries input
-access dependencies into derived records and applies the configured policy on release. This
-contract does not sandbox arbitrary in-process plugin code. `humans.txt` is one environment's
+access dependencies into derived records by union and applies the configured policy on release.
+Only that policy may authorize removing an access dependency; a plugin's narrower explanation
+is not permission. Cross-call input metadata alone does not prove complete dependency coverage.
+This contract does not sandbox arbitrary in-process plugin code. `humans.txt` is one environment's
 policy adapter, not a requirement for every installation.
 
 ## First executable slice
@@ -134,14 +171,17 @@ reader output:
 
 1. Both selectors work through the same caller. Their records lead to the fixture's actual
    revisions and patches after replacement.
-2. An invalid connection fails before either operation executes.
+2. An unsupported input or invalid connection fails before the dependent operation executes.
 3. Empty success and an interrupted or failed reader remain distinguishable.
 4. Derived output retains source/access dependencies; wrapping a denied input in a selection
    or summary cannot expose it.
 5. Legacy `recent/search/read` work through adapters. Tests neither install nor restart MCP.
+6. Serialize selected evidence, create a fresh runner, then read the supporting change. No
+   hidden run state is required; claimed provenance is not treated as authentication.
 
-Follow with an audio-reference fixture and deterministic transcript provider to challenge
-text-only assumptions before declaring the API stable. Real recognition and model-backed
+Pass note text and a deterministic transcript with audio-interval evidence through the very same
+selector before declaring the API stable. Evidence must survive unchanged. This checks the
+passage boundary without claiming to test recognition. Real recognition and model-backed
 selection are later implementations, not dependencies of the first proof.
 
 ## Migration from the imported code
