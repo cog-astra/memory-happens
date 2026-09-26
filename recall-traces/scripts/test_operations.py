@@ -47,6 +47,7 @@ class OperationTest(unittest.TestCase):
                 raise AssertionError('Must not execute')
         runner = Runner({'select': Spy()})
         cases = [({'limit': 0, 'query': 'x'}, {'passages': []}, 'failed'),
+                 ([], {'passages': []}, 'failed'),
                  ({'query': 'x'}, {'wrong': []}, 'failed'),
                  ({'query': 'x'}, {'passages': [external(text=None)]}, 'unsupported')]
         for params, inputs, expected in cases:

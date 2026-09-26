@@ -38,7 +38,7 @@ class Runner:
             else:
                 descriptor = matches[0]
                 trace['version'] = descriptor.version
-                values = descriptor.parameters.model_validate(parameters or {}).model_dump()
+                values = descriptor.parameters.model_validate(parameters if parameters is not None else {}).model_dump()
                 supplied = inputs if inputs is not None else {}
                 if not isinstance(supplied, dict) or set(supplied) != set(descriptor.inputs):
                     raise ValueError('Input ports do not match the operation.')
