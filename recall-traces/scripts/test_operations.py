@@ -8,7 +8,7 @@ from threading import Event
 from demo_operations import call, fixture, recall_change
 from plugins.git_operations import Plugin as GitReader
 from plugins.select_literal import Plugin as Selector
-from recall_operations import Evidence, Lineage, Operation, Outcome, Passage, Record
+from recall_operations import Evidence, Lineage, Operation, Outcome, Passage, Record, passage
 from recall_runner import Runner
 from recall_core import Recall
 
@@ -40,6 +40,16 @@ class OperationTest(unittest.TestCase):
         records = call(Runner({'select': Selector()}), 'select', 'select', {'query': 'cache'}, {'passages': inputs})
         self.assertEqual([record['evidence'] for record in records], [record['evidence'] for record in inputs])
         self.assertTrue(all(record['lineage']['input_origin'] == 'caller_supplied' for record in records))
+
+    def test_passage_edits_do_not_change_its_input(self):
+        record = Record.model_validate(external())
+        record.context['nested'] = {'words': ['original']}
+        copied = passage(record)
+        copied.evidence[0].locator = 'changed'
+        copied.evidence.clear()
+        copied.context['nested']['words'].append('changed')
+        self.assertEqual(record.evidence[0].locator, 'note.md#line=0,1')
+        self.assertEqual(record.context['nested']['words'], ['original'])
 
     def test_validation_precedes_plugin_execution(self):
         class Spy(Selector):

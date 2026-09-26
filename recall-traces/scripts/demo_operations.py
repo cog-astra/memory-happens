@@ -62,9 +62,10 @@ def recall_change(repo, selector):
 
 def main():
     parser = argparse.ArgumentParser(description='Recall why a synthetic optimization was removed.')
-    parser.add_argument('--selector', default='plugins.select_literal', help='Trusted Python module exporting Plugin()')
+    parser.add_argument('--selector', default='plugins.select_literal', help='Trusted Python module with catalog/invoke or Plugin()')
     args = parser.parse_args()
-    selector = importlib.import_module(args.selector).Plugin()
+    module = importlib.import_module(args.selector)
+    selector = module if callable(getattr(module, 'catalog', None)) and callable(getattr(module, 'invoke', None)) else module.Plugin()
     with tempfile.TemporaryDirectory() as folder:
         fixture(folder)
         print(json.dumps(recall_change(folder, selector), ensure_ascii=False, indent=2))

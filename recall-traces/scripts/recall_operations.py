@@ -71,4 +71,4 @@ class Context:
 
 
 def passage(record: Record) -> Passage:
-    return Passage(text=record.text, evidence=record.evidence, context=record.context)
+    return Passage(text=record.text, evidence=record.evidence, context=record.context).model_copy(deep=True)

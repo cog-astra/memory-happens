@@ -4,17 +4,21 @@ The executable slice is under development. It does not replace the installed MCP
 The public Python types live in `scripts/recall_operations.py`; plugins import those types,
 not runner internals. Version `0.1` is provisional until the independent selector trial.
 
-A plugin supplies `catalog() -> iterable[Operation]` and
+A plugin object (including a Python module) supplies `catalog() -> iterable[Operation]` and
 `invoke(operation, parameters, inputs, context) -> iterator[Passage | Outcome]`.
 The runner validates parameters against the descriptor's Pydantic model, then passes their
 plain dictionary with defaults applied. Inputs map the declared port names to finite lists
-of `Record`. Operations needing text set `requires_text=True`.
+of `Record`. The `operation` argument is the descriptor's name, a string. Operations needing
+text set `requires_text=True`; the runner checks every record on every declared input port.
 
 For a replaceable selector, expose `select`, input port `passages`, and parameters
 `query: str` (nonempty) and `limit: int` (positive, default 5). Yield selected passages and
 then exactly one `Outcome(status='success')`, including when nothing matched. Ranking may
 differ between implementations. Preserve evidence without interpreting its source or locator.
-`passage(record)` copies the passage fields without copying the runner-owned envelope.
+`passage(record)` deeply copies passage fields without copying the runner-owned envelope.
+This prevents edits to its result from mutating the supplied record; it does not make values
+immutable or enforce semantic fidelity. The slice always uses conservative lineage; plugins
+cannot yet refine it, although the architecture leaves that extension open.
 
 Readers call `context.require(*resolved_resources)` before accessing a resource. Transforms
 receive the conservative union of input access dependencies. These checks constrain trusted
