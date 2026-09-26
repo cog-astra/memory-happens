@@ -49,7 +49,7 @@ cd recall-traces/scripts
 <python> -m unittest test_operations
 ```
 
-The tests take under a minute and use temporary synthetic repositories. If `venv` is missing
+The tests use temporary synthetic repositories. If `venv` is missing
 (some Linux distributions package it separately), tell the human which package is needed.
 Do not install system packages yourself. Do not start `recall_mcp.py` by hand: it is a stdio
 server and waits silently for a client.
@@ -81,8 +81,7 @@ that session in the same folder. Do not report a recall you could not run.
 In a session with the tools, ask: *why was the lookup cache removed?* The demo history contains
 a cache that was added and later removed. A good answer uses `operation_catalog` and
 `operation_invoke` to list the history, select candidates and read the patch. It names the
-commit that removed the cache and quotes its stated reason: the cache key omitted the row
-revision. It also says what it read.
+commit that removed the cache and explains the reason recorded there. It also says what it read.
 
 ## 6. Next: a repository of the human's choice
 
