@@ -1,22 +1,36 @@
 # Why memory happens
 
-Memory happens when something from the past becomes useful in the present.
-Our aim is to make that possible during ordinary work, with less effort spent
-maintaining memory and more attention available for the work itself.
+Memory happens through ordinary activity. Creating a file, discussing a problem,
+changing an approach or abandoning an attempt leaves information we can return to.
+Our aim is to make those traces available for later understanding without requiring
+a separate act of remembering to write memory down.
 
 This is our design position. The [README](README.md) and issues describe what the
 implementation currently supports and where it falls short.
 
-## Work should leave enough to return to
+## Let ordinary work leave richer traces
 
-Conversations, changes, notes and unfinished attempts leave traces. We want to use
-those traces so a person can return to a problem without first reconstructing the
-history for an assistant. A handoff or a carefully written note can help, but useful
-recall should also be possible when nobody anticipated the next question.
+A file and its creation time tell us that something happened. They say little about
+what prompted it or what the author was trying to achieve. A related request, the
+change itself and the surrounding attempts can make more of that context available.
 
-An archive preserves a record. Recall selects and connects parts of that record
-for a current purpose. Storing more is useful only when it improves the chance of
-finding something worth bringing back.
+One direction of development is to retain more of the information already present
+when an action happens, including its connections to other actions. The ordinary
+workflow should carry that context forward. Requiring people to maintain a parallel
+account of their work would undermine this aim.
+
+## Learn to read the traces
+
+The other direction is to become better at finding, reading and connecting what
+remains. Richer records and better reading are separate problems; improving either
+can help. A reader should distinguish an observed event from an inferred intention.
+When the traces do not support an explanation, the gap should remain visible.
+
+A summary records how someone understood an episode at a particular time. That is
+a useful additional trace, but it selects what mattered to that reader then. Making
+it the sole basis of future recall would bind future questions to that earlier
+selection. We want to preserve the possibility of understanding the past differently
+when a new task makes a previously minor detail relevant.
 
 ## The present gives the past its relevance
 
