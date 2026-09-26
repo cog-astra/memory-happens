@@ -26,10 +26,11 @@ Propose a folder for `<clone>`. Tell the human the following and wait for a yes:
 > 3. register an MCP server `recall-demo`: in Claude Code for this project only (`~/.claude.json`),
 >    in Codex for all sessions (`~/.codex/config.toml`).
 >
-> The demo reads only a Git history that it generates in a temporary folder and deletes on exit.
+> The demo reads only a Git history that it generates in a temporary folder.
 > It does not read your files or sessions, use the network or call a model.
 > To undo: `claude mcp remove recall-demo -s local` (or `codex mcp remove recall-demo`), then
-> delete `<clone>`.
+> delete `<clone>`. Normal server shutdown removes its temporary history, but a client that
+> terminates the server can leave a `recall-demo-*` folder in the temporary directory.
 
 ## 3. Install
 
@@ -77,6 +78,10 @@ codex mcp get recall-demo
 MCP tools load when a session starts. If `operation_catalog` is not among your tools now, say
 so plainly: registration is done, and a new session will have the tools. In Claude Code, start
 that session in the same folder. Do not report a recall you could not run.
+
+Use a new session with the same client profile after registration. If its tools are still
+unavailable, report that connection problem; an ad hoc SDK script does not verify the client's
+MCP connection.
 
 In a session with the tools, ask: *why was the lookup cache removed?* The demo history contains
 a cache that was added and later removed. A good answer uses `operation_catalog` and
