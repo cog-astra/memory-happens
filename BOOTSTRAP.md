@@ -85,14 +85,16 @@ unavailable, report that connection problem; an ad hoc SDK script does not verif
 MCP connection.
 
 In a session with the tools, ask: *why was the lookup cache removed?* The demo history contains
-a cache that was added and later removed. A good answer uses `operation_catalog` and
-`operation_invoke` to list the history, select candidates and read the patch. It names the
+a cache that was added and later removed. A good answer uses `operation_catalog`, then
+`operation_run`: a first look that selects from the history, then a read of the chosen commit. It names the
 commit that removed the cache and explains the reason recorded there. It also says what it read.
 
 ## Beyond the demo
 
-The experimental `--repo` mode can return more history and patch data than an agent can
-practically pass between calls. It is not part of this first-connection path yet.
+The `--repo` mode connects the same tools to a chosen repository, but it is still experimental
+and not part of this first-connection path. A large patch can be read only whole, with a large
+enough `characters`. History over a long repository is slow; see
+[issue #12](https://github.com/cog-astra/memory-happens/issues/12).
 
 Recall over session archives, notes and project memory needs more setup; see
 [Install and test](README.md#install-and-test).

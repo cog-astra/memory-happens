@@ -44,7 +44,8 @@ class Plugin:
         if operation == 'history':
             limit = [f'--max-count={parameters["limit"]}'] if parameters['limit'] is not None else []
             revisions = self.git('rev-list', *limit, 'HEAD').splitlines()
-            hidden = False
+            total = int(self.git('rev-list', '--count', 'HEAD'))
+            hidden = 0
             for revision in revisions:
                 if context.cancelled.is_set():
                     yield Outcome(status='cancelled')
@@ -52,16 +53,20 @@ class Plugin:
                 try:
                     self.require_commit(revision, context)
                 except AccessDenied:
-                    hidden = True
+                    hidden += 1
                     continue
                 header, description = self.git('show', '-s', '--format=%aI%n%B', revision).split('\n', 1)
                 yield Passage(text=description,
                               evidence=[Evidence(source=self.source, locator=revision, revision=revision)],
-                              context={'commit_authored_at': header})
+                              context={'event_time': header})
+            scope = (f'all {total} commits on HEAD' if len(revisions) == total
+                     else f'{len(revisions)} most recent of {total} commits on HEAD')
             if hidden:
                 yield Outcome(status='partial', code='policy_filtered',
-                              message='Some revisions were excluded by the configured access policy.')
-                return
+                              message=f'{scope}; {hidden} excluded by the configured access policy.')
+            else:
+                yield Outcome(status='success', message=scope + '.')
+            return
         else:
             evidence = Evidence.model_validate(parameters['evidence'])
             revision = evidence.locator
