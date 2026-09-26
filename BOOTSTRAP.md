@@ -85,8 +85,8 @@ unavailable, report that connection problem; an ad hoc SDK script does not verif
 MCP connection.
 
 In a session with the tools, ask: *why was the lookup cache removed?* The demo history contains
-a cache that was added and later removed. A good answer uses `operation_catalog` and
-`operation_invoke` to list the history, select candidates and read the patch. It names the
+a cache that was added and later removed. A good answer uses `operation_catalog`, then
+`operation_run`: a first look that selects from the history, then a read of the chosen commit. It names the
 commit that removed the cache and explains the reason recorded there. It also says what it read.
 
 ## Beyond the demo

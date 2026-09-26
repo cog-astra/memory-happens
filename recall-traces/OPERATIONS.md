@@ -27,7 +27,8 @@ Policy refusals raise `AccessDenied`, distinct from OS permission failures. A so
 a refused item and report a partial result. Git history does so with `policy_filtered`; a
 direct read of denied evidence fails with `access_denied`.
 
-`Passage.context` carries optional source-specific attributes. Evidence identifies a configured
+`Passage.context` carries optional source-specific attributes; `event_time` (ISO 8601) is when
+the traced event happened. Evidence identifies a configured
 source and an opaque locator, optionally its revision or observation time. Records returned by
 a caller have unverified provenance. Read operations resolve their evidence and check policy
 again; record IDs cannot retrieve content in a later invocation.
@@ -72,25 +73,43 @@ The operation runner accepts its own explicit policy callback. No policy file fo
 ## Through MCP
 
 `python recall_mcp.py --demo` serves a temporary synthetic Git history. It exposes only
-`operation_catalog` and `operation_invoke`; no personal source configuration is read.
+`operation_catalog` and `operation_run`; no personal source configuration is read.
 `--repo /absolute/path/to/repository` connects the same tools to a chosen working tree.
-It remains experimental: accumulated metadata and unbounded patches can make replies too
-large to use through an agent; see [issue #14](https://github.com/cog-astra/memory-happens/issues/14).
+It remains experimental: a patch larger than the caller's budget can be read only whole, and
+history starts separate Git processes per commit ([issue #12](https://github.com/cog-astra/memory-happens/issues/12)).
 `--selector trigram_selector` replaces the default selector in either mode.
 Without either mode flag, the existing `recent`, `search` and `read` tools remain available.
 See [first connection](../BOOTSTRAP.md) for client setup.
 
-`operation_catalog()` returns descriptors. `operation_invoke(plugin, operation, parameters,
-inputs)` returns `records`, `outcome`, `invocation` and `trace` as structured JSON, with a
-text representation for clients that need it. Each call uses a fresh runner. Pass complete
-records into a selector's `passages` port, or pass evidence to a reader's parameters.
-Inspect the outcome even when records are present; a partial result is not a complete scan.
+`operation_run(steps, characters, view, trace)` runs a finite recipe of catalog operations in one
+call with a fresh runner. A step is `{name, plugin, operation, parameters?, inputs?}`; an input
+port holds the name of an earlier step or a list of complete records. Records move between steps
+inside the call, so the caller does not carry intermediate batches. Policy, evidence, lineage and
+outcomes apply to every step as they do to a single invocation. A step that ends neither in
+`success` nor in `partial` stops the recipe and its outcome becomes the recipe's. Every step that
+ran is summarized: operation, parameters, record count, outcome, and a month-by-month breakdown
+of `context.event_time` that keeps gaps between periods visible.
+
+Only the last step's records are returned, projected by `view`: `first_look` (default) gives
+headline, event time and evidence; `passages` gives text, evidence and context; `records` gives
+complete records with the runner envelope. Projection happens only at this boundary; inside the
+recipe every record keeps its access dependencies.
+
+`characters` is required and has no default. It bounds the reply's JSON text in Unicode code
+points and counts everything returned, including `trace` and the `size` field itself; structured
+content carries the same object. If records or trace would exceed it, the reply contains neither:
+its outcome is `partial` with code `over_budget`, followed by the would-be size, the record count,
+the largest record and next steps. That diagnostic, like a failure without records, is returned
+even when it is longer than `characters`.
 
 The MCP mode collects finite results before returning; it does not stream records to the
 client or propagate MCP cancellation to the synchronous runner. Git history defaults to
-50 commits; its catalog exposes the limit. Git reading is restricted to the explicitly
-configured repository. Selector modules are trusted Python code, not a sandbox.
-The demo repository lasts for the server process; its paths are not durable references.
+50 commits and names its coverage in its outcome message, such as
+`50 most recent of 626 commits on HEAD`. Git reading is restricted to the explicitly configured
+repository. Selector modules are trusted Python code, not a sandbox. The demo repository lasts
+for the server process; its paths are not durable references.
 
-The stdio integration tests exercise both selectors and evidence reuse in a fresh server.
-They do not establish the quality of a language model's interpretation.
+The stdio integration tests exercise both selectors, a first look followed by a detail read,
+the character budget and distinct outcomes over a synthetic history with separated periods,
+overlapping paths and a large patch (`synthetic_history.py`). They do not establish the quality
+of a language model's interpretation.

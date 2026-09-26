@@ -25,7 +25,7 @@ class Plugin(Source):
     def recent(self, since):
         repo = self.reader.repo
         for record in self.records('history', {'limit': None}):
-            moment = datetime.fromisoformat(record['context']['commit_authored_at'])
+            moment = datetime.fromisoformat(record['context']['event_time'])
             if moment >= since:
                 yield {'time': moment, 'where': str(repo), 'group': f'git · {repo.as_posix()}',
                        'bound': {'repo': repo, 'files': [Path(path) for path in record['access'] if path != repo.as_posix()]},
