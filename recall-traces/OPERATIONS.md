@@ -74,6 +74,8 @@ The operation runner accepts its own explicit policy callback. No policy file fo
 `python recall_mcp.py --demo` serves a temporary synthetic Git history. It exposes only
 `operation_catalog` and `operation_invoke`; no personal source configuration is read.
 `--repo /absolute/path/to/repository` connects the same tools to a chosen working tree.
+It remains experimental: accumulated metadata and unbounded patches can make replies too
+large to use through an agent; see [issue #14](https://github.com/cog-astra/memory-happens/issues/14).
 `--selector trigram_selector` replaces the default selector in either mode.
 Without either mode flag, the existing `recent`, `search` and `read` tools remain available.
 See [first connection](../BOOTSTRAP.md) for client setup.

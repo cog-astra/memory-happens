@@ -3,7 +3,7 @@
 For an agent given this repository's URL and asked to set up recall. The human does not need
 to explain anything else. You check prerequisites and ask the human once. Then you install into
 a folder of its own, register a demo server and make a first recall over a synthetic Git history.
-After that you can connect a repository the human chooses.
+This first connection covers the demo only.
 
 ## 1. Check without changing anything
 
@@ -83,17 +83,10 @@ a cache that was added and later removed. A good answer uses `operation_catalog`
 `operation_invoke` to list the history, select candidates and read the patch. It names the
 commit that removed the cache and explains the reason recorded there. It also says what it read.
 
-## 6. Next: a repository of the human's choice
+## Beyond the demo
 
-Ask which repository to connect, and say that recall will read that repository's commit history
-and patches, nothing else. Then register it under another name:
-
-```sh
-claude mcp add recall-repo -- <python> <server> --repo <absolute repository path>
-```
-
-For Codex, use `codex mcp add recall-repo -- …` with the same arguments. Here too, a new
-session may be needed.
+The experimental `--repo` mode can return more history and patch data than an agent can
+practically pass between calls. It is not part of this first-connection path yet.
 
 Recall over session archives, notes and project memory needs more setup; see
 [Install and test](README.md#install-and-test).
