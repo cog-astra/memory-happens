@@ -1,8 +1,8 @@
 # Experimental operation boundary
 
-The executable slice is under development. It does not replace the installed MCP API.
+The executable slice is experimental. It does not replace the default MCP API.
 The public Python types live in `scripts/recall_operations.py`; plugins import those types,
-not runner internals. Version `0.1` is provisional until the independent selector trial.
+not runner internals. Version `0.1` is provisional; two selectors are exercised by the tests.
 
 A plugin object (including a Python module) supplies `catalog() -> iterable[Operation]` and
 `invoke(operation, parameters, inputs, context) -> iterator[Passage | Outcome]`.
@@ -69,5 +69,28 @@ not a replacement for Git discovery. Existing configured plugins and MCP tools a
 The adapter still uses the legacy core's boundary filtering; it does not resolve issue #2.
 The operation runner accepts its own explicit policy callback. No policy file format is required.
 
-Structured MCP exposure and a stable external-plugin API remain subsequent work. This slice
-does not register a server, alter an installed skill, or start a model.
+## Through MCP
+
+`python recall_mcp.py --demo` serves a temporary synthetic Git history. It exposes only
+`operation_catalog` and `operation_invoke`; no personal source configuration is read.
+`--repo /absolute/path/to/repository` connects the same tools to a chosen working tree.
+It remains experimental: accumulated metadata and unbounded patches can make replies too
+large to use through an agent; see [issue #14](https://github.com/cog-astra/memory-happens/issues/14).
+`--selector trigram_selector` replaces the default selector in either mode.
+Without either mode flag, the existing `recent`, `search` and `read` tools remain available.
+See [first connection](../BOOTSTRAP.md) for client setup.
+
+`operation_catalog()` returns descriptors. `operation_invoke(plugin, operation, parameters,
+inputs)` returns `records`, `outcome`, `invocation` and `trace` as structured JSON, with a
+text representation for clients that need it. Each call uses a fresh runner. Pass complete
+records into a selector's `passages` port, or pass evidence to a reader's parameters.
+Inspect the outcome even when records are present; a partial result is not a complete scan.
+
+The MCP mode collects finite results before returning; it does not stream records to the
+client or propagate MCP cancellation to the synchronous runner. Git history defaults to
+50 commits; its catalog exposes the limit. Git reading is restricted to the explicitly
+configured repository. Selector modules are trusted Python code, not a sandbox.
+The demo repository lasts for the server process; its paths are not durable references.
+
+The stdio integration tests exercise both selectors and evidence reuse in a fresh server.
+They do not establish the quality of a language model's interpretation.
