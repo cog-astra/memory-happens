@@ -11,6 +11,8 @@ Our [vision and design principles](VISION.md) explain why we build recall from t
 how we treat evidence and attention, and what would count as useful memory.
 The [FAQ](FAQ.md) explores plugins, recall workflows, model-assisted understanding
 and the limits of what a trace can tell us.
+The [proposed operation contract](ARCHITECTURE.md) describes the next architecture slice
+and its acceptance checks; it is not the API of the imported implementation.
 
 ## Work together
 
