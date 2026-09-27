@@ -1,0 +1,470 @@
+import itertools
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from pydantic import Field
+
+import recall_archive
+from plugins import git as git_source, memory as memory_source, notes as notes_source, sessions as session_source
+from recall_bounds import within
+from recall_core import REPO_REV, mentions, modified
+from recall_operations import AccessDenied, Evidence, Operation, Outcome, Passage, Value
+
+FOLDER_PATTERNS = ('*.md', '*.txt', '*.json')
+EMPTY_QUERY = Outcome(status='failed', code='empty_query', next_steps=['Give words separated by spaces.'])
+
+
+class Recent(Value):
+    days: int = Field(default=7, ge=1)
+    where: str | None = None
+
+
+class Search(Value):
+    query: str = Field(min_length=1)
+    days: int | None = Field(default=None, ge=1)
+    where: str | None = None
+    limit: int | None = Field(default=None, ge=1)
+
+
+class FolderSearch(Search):
+    root: str = Field(min_length=1)
+
+
+class Read(Value):
+    evidence: Evidence
+    start: int | None = Field(default=None, ge=1)
+    lines: int = Field(default=80, ge=1)
+
+
+def iso(moment):
+    return moment.isoformat() if moment else None
+
+
+def since_of(days):
+    return datetime.now(timezone.utc) - timedelta(days=days) if days else None
+
+
+def words_of(query):
+    return list(dict.fromkeys(word.casefold() for word in query.split()))
+
+
+def hides_path(bounds, path):
+    return bool(path) and (bounds.hides(path) or bounds.hides(Path(path).resolve()))
+
+
+def hidden(bounds, bound):
+    if 'files' in bound:
+        if bounds.owner_of(bound['repo']) is None and bounds.owner_of(Path(bound['repo']).resolve()) is None:
+            return False
+        return not bound['files'] or any(hides_path(bounds, name) for name in bound['files'])
+    if 'project' in bound:
+        return bounds.hides_project(bound['project'])
+    return hides_path(bounds, bound.get('path'))
+
+
+def ranked(hits, limit):
+    hits.sort(key=lambda hit: (len(hit['matched']), hit['total'], hit['time']), reverse=True)
+    return hits[:limit] if limit else hits
+
+
+def read_text(alias, address, target, start, lines, observed):
+    now = modified(target).isoformat()
+    with target.open(encoding='utf-8-sig', errors='replace') as stream:
+        rows = list(itertools.islice(stream, start - 1, start - 1 + lines + 1))
+    yield from window(alias, f'{address} start={start}', rows, start, lines, observed=observed, now=now)
+
+
+def window(alias, locator, rows, start, lines, revision=None, observed=None, now=None):
+    shown = rows[:lines]
+    if shown:
+        yield Passage(text=''.join(shown),
+                      evidence=[Evidence(source=alias, locator=locator, revision=revision, observed_at=now)],
+                      context={'first_line': start, 'last_line': start + len(shown) - 1,
+                               **({'modified_at': now} if now else {})})
+    more = len(rows) > lines
+    changed = observed is not None and now is not None and observed != now
+    yield Outcome(status='success',
+                  code='source_changed' if changed else ('' if shown else 'past_end'),
+                  message=('The source changed after this evidence was observed.' if changed
+                           else '' if shown else 'The start line is past the end of the source.'),
+                  continuation={'start': start + lines} if more else None,
+                  next_steps=[f'Read with start={start + lines} to continue.'] if more else [])
+
+
+class Coverage:
+    def __init__(self, present, missing, warnings=(), recovery=()):
+        self.present, self.missing = present, missing
+        self.warnings, self.recovery = list(warnings), list(recovery)
+        self.hidden = 0
+
+    def outcome(self, kind):
+        if not self.present:
+            return Outcome(status='unavailable', code='corpus_missing' if kind == 'sessions' else 'source_missing',
+                           message='; '.join(f'{path} is missing' for path in self.missing) or 'No roots are configured.',
+                           next_steps=self.recovery or ['Check this source in the configuration.'])
+        reasons = []
+        if self.missing:
+            reasons.append(('source_partial', f"missing: {', '.join(map(str, self.missing))}"))
+        if self.warnings:
+            reasons.append(('stale_archive', '; '.join(self.warnings)))
+        if self.hidden:
+            reasons.append(('policy_filtered', f'{self.hidden} excluded by the configured access policy'))
+        if not reasons:
+            return Outcome(status='success')
+        return Outcome(status='partial', code=reasons[0][0], message='; '.join(text for _, text in reasons) + '.',
+                       next_steps=self.recovery if self.missing or self.warnings else [])
+
+
+class Sessions:
+    kind = 'sessions'
+
+    def __init__(self, options):
+        self.legacy = session_source.Plugin(options)
+
+    def roots(self):
+        return [Path(store['corpus']) for store in self.legacy.stores]
+
+    def coverage(self, now):
+        stores = [store for store in self.legacy.stores if Path(store['corpus']).is_dir()]
+        warnings = session_source.Plugin({**self.legacy.options, 'stores': stores}).health(now)
+        recovery = [f"Refresh the archive: python {session_source.SCRIPTS / store['archiver']}"
+                    for store in self.legacy.stores if store.get('archiver')]
+        return Coverage([Path(store['corpus']) for store in stores],
+                        [root for root in self.roots() if not root.is_dir()], warnings, recovery)
+
+    def recent(self, since):
+        for trace in self.legacy.recent(since):
+            path = Path(trace['locator'].split(' start=')[0])
+            store = path.with_suffix('.topics.json')
+            topics = (json.loads(store.read_text(encoding='utf-8')).get(trace['start'].astimezone().date().isoformat())
+                      if store.is_file() and self.legacy.options.get('topics', True) else None)
+            yield trace, path, '\n'.join([trace['headline'], *trace['quotes']]), {
+                'event_time': iso(trace['time']), 'day_start': iso(trace['start']), 'project': trace['where'],
+                'automated': trace['automated'], 'untitled': trace['untitled'], 'topics': topics}
+
+    def search(self, words, since):
+        for hit in self.legacy.search(words, since):
+            yield hit, Path(hit['locator'].split(' start=')[0]), {
+                'event_time' if hit['said'] else 'modified_at': iso(hit['time'])}
+
+    def owns(self, path, target):
+        return target.suffix == '.md' and any(within(path, root) or within(target, root.resolve()) for root in self.roots())
+
+    def bound(self, target):
+        return {'path': session_source.header(target).get('project')}
+
+
+class Memory:
+    kind = 'memory'
+
+    def __init__(self, options):
+        self.legacy = memory_source.Plugin(options)
+
+    def roots(self):
+        return [Path(root) for root in self.legacy.options.get('roots', [])]
+
+    def coverage(self, now):
+        roots = self.roots()
+        return Coverage([r for r in roots if r.is_dir()], [r for r in roots if not r.is_dir()])
+
+    def recent(self, since):
+        for trace in self.legacy.recent(since):
+            yield trace, Path(trace['locator']), trace['headline'], {
+                'modified_at': iso(trace['time']), 'project': trace['where'], 'group': trace['group']}
+
+    def search(self, words, since):
+        for hit in self.legacy.search(words, since):
+            yield hit, Path(hit['locator'].split(' start=')[0]), {'modified_at': iso(hit['time'])}
+
+    def owns(self, path, target):
+        return target.parent.name == 'memory' and any(within(target, root.resolve()) for root in self.roots())
+
+    def bound(self, target):
+        return {'project': target.parent.parent.name}
+
+
+class Notes:
+    kind = 'notes'
+
+    def __init__(self, options):
+        self.legacy = notes_source.Plugin(options)
+
+    def roots(self):
+        return [Path(root) for root in self.legacy.options.get('roots', [])]
+
+    def coverage(self, now):
+        roots = self.roots()
+        return Coverage([r for r in roots if r.is_dir()], [r for r in roots if not r.is_dir()])
+
+    def recent(self, since):
+        for trace in self.legacy.recent(since):
+            yield trace, Path(trace['locator']), trace['headline'], {
+                'modified_at': iso(trace['time']), 'group': trace['group']}
+
+    def search(self, words, since):
+        for hit in self.legacy.search(words, since):
+            yield hit, Path(hit['locator'].split(' start=')[0]), {'modified_at': iso(hit['time'])}
+
+    def owns(self, path, target):
+        for root in self.roots():
+            if within(target, root.resolve()):
+                relative = target.relative_to(root.resolve())
+                return not any(part.startswith('.') for part in relative.parts) and any(
+                    target.match(pattern) for pattern in self.legacy.options.get('patterns', ['*.md']))
+        return False
+
+    def bound(self, target):
+        return {'path': target}
+
+
+class Git:
+    kind = 'git'
+
+    def __init__(self, options):
+        self.options = options
+
+    def roots(self):
+        return [Path(root) for root in [*self.options.get('discover', []), *self.options.get('repos', [])]]
+
+    def coverage(self, now):
+        discover = [Path(root) for root in self.options.get('discover', [])]
+        repos = [Path(repo) for repo in self.options.get('repos', [])]
+        present = [r for r in discover if r.is_dir()] + [r for r in repos if (r / '.git').exists()]
+        missing = [r for r in discover if not r.is_dir()] + [r for r in repos if not (r / '.git').exists()]
+        return Coverage(present, missing)
+
+    def commits(self, since, words=()):
+        found = [repo for repo in git_source.repos(self.options) if git_source.active(repo, since)]
+        yield from git_source.across(found, lambda repo: git_source.commits(repo, since, words, full=True))
+
+    def recent(self, since):
+        for repo, commit in self.commits(since):
+            trace = {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],
+                     'locator': f"{repo.as_posix()}@{commit['rev']}"}
+            yield trace, None, commit['subject'], {
+                'event_time': iso(commit['time']), 'repository': repo.as_posix(), 'revision': commit['rev']}
+
+    def search(self, words, since):
+        for repo, commit in self.commits(since, words):
+            folded = commit['subject'].casefold()
+            hit = {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],
+                   'matched': [word for word in words if word in folded], 'total': 1, 'places': [],
+                   'excerpt': commit['subject'], 'label': repo.as_posix(),
+                   'locator': f"{repo.as_posix()}@{commit['rev']}"}
+            yield hit, None, {'event_time': iso(commit['time']), 'repository': repo.as_posix(), 'revision': commit['rev']}
+
+    def repository(self, locator):
+        match = REPO_REV.match(locator)
+        if not match:
+            return None, None
+        repo = Path(match[1]).resolve()
+        known = {Path(found).resolve() for found in git_source.repos(self.options)}
+        return (repo, match[2]) if repo in known else (None, None)
+
+
+KINDS = {kind.kind: kind for kind in (Sessions, Memory, Notes, Git)}
+
+
+class Places:
+    def __init__(self, bounds, entries):
+        """entries are all configured sources: a file one of them owns is judged by that owner's bound too."""
+        self.bounds = bounds
+        self.owners = [KINDS[entry['plugin']](entry) for entry in entries
+                       if entry.get('plugin') in ('sessions', 'memory', 'notes')]
+
+    def hidden(self, bound=None, path=None):
+        if bound and hidden(self.bounds, bound):
+            return True
+        if path is None:
+            return False
+        target = recall_archive.resolve(path)
+        return hides_path(self.bounds, path) or hides_path(self.bounds, target) or any(
+            owner.owns(Path(path), target) and target.is_file() and hidden(self.bounds, owner.bound(target))
+            for owner in self.owners)
+
+
+class Plugin:
+    def __init__(self, alias, options, places):
+        self.alias, self.options, self.places = alias, options, places
+        self.bounds = places.bounds
+        self.kind = options.get('plugin')
+        self.source = KINDS[self.kind](options) if self.kind in KINDS else None
+
+    def catalog(self):
+        return [Operation('recent', 'Traces of recent days from this source, newest first.', Recent),
+                Operation('search', 'Places where the query words occur, best matches first.', Search),
+                Operation('read', 'Read the place identified by evidence, with a continuation.', Read),
+                Operation('health', 'Warnings about missing or stale parts of this source.')]
+
+    def evidence(self, locator, path, revision=None):
+        return Evidence(source=self.alias, locator=locator, revision=revision,
+                        observed_at=iso(modified(path)) if path is not None else None)
+
+    def invoke(self, operation, parameters, inputs, context):
+        if self.source is None:
+            yield Outcome(status='unsupported', code='unknown_source_type',
+                          message=f"No operation adapter for source type {self.kind!r}.")
+            return
+        coverage = self.source.coverage(datetime.now(timezone.utc))
+        if operation == 'health':
+            for warning in [*[f'{path} is missing' for path in coverage.missing], *coverage.warnings]:
+                yield Passage(text=warning, context={'source_type': self.kind})
+            yield Outcome(status='success' if coverage.present else 'unavailable',
+                          code='' if coverage.present else 'source_missing', next_steps=coverage.recovery)
+            return
+        if operation == 'read':
+            yield from self.read(parameters, context)
+            return
+        if not coverage.present:
+            yield coverage.outcome(self.kind)
+            return
+        closed = [root.resolve() for root in coverage.present if hides_path(self.bounds, root)]
+        context.require(*sorted({root.resolve().as_posix() for root in coverage.present if root.resolve() not in closed}))
+
+        def admit(bound, path):
+            if self.places.hidden(bound, path):
+                coverage.hidden += 1
+                return False
+            place = Path(bound['repo']) if 'files' in bound else path
+            if place is not None and any(within(place, root) for root in closed):
+                context.require(*([Path(name).resolve().as_posix() for name in bound['files']] if 'files' in bound
+                                  else [Path(path).resolve().as_posix()]))
+            return True
+
+        if operation == 'recent':
+            since = since_of(parameters['days'])
+            found = []
+            for trace, path, text, extra in self.source.recent(since):
+                if trace['time'] < since or not mentions(trace['where'], parameters['where']):
+                    continue
+                if not admit(trace['bound'], path):
+                    continue
+                found.append((trace['time'], Passage(
+                    text=text, evidence=[self.evidence(trace['locator'], path, extra.get('revision'))],
+                    context={'matched': [], 'total': 0, **extra})))
+            for _, item in sorted(found, key=lambda pair: pair[0], reverse=True):
+                yield item
+        else:
+            words = words_of(parameters['query'])
+            if not words:
+                yield EMPTY_QUERY
+                return
+            since = since_of(parameters['days'])
+            hits = []
+            for hit, path, extra in self.source.search(words, since):
+                if (since and hit['time'] < since) or not mentions(hit['where'], parameters['where']):
+                    continue
+                if not admit(hit['bound'], path):
+                    continue
+                hits.append({**hit, 'path': path, 'extra': extra})
+            for hit in ranked(hits, parameters['limit']):
+                yield hit_passage(self.evidence(hit['locator'], hit['path'], hit['extra'].get('revision')), hit)
+        yield coverage.outcome(self.kind)
+
+    def read(self, parameters, context):
+        evidence = Evidence.model_validate(parameters['evidence'])
+        if evidence.source != self.alias:
+            yield Outcome(status='unsupported', code='incompatible_evidence')
+            return
+        if self.kind == 'git':
+            yield from self.read_commit(evidence, parameters, context)
+            return
+        address, _, given = evidence.locator.partition(' start=')
+        start = parameters['start'] or (int(given) if given.isdigit() else 1)
+        path = Path(address)
+        target = recall_archive.resolve(path)
+        if not self.source.owns(path, target):
+            yield Outcome(status='unsupported', code='incompatible_evidence')
+            return
+        if self.places.hidden(path=path):
+            raise AccessDenied('The evidence lies in a closed personal space.')
+        if not target.is_file():
+            yield Outcome(status='unavailable', code='source_missing', message=f'{address} is missing.')
+            return
+        if self.places.hidden(self.source.bound(target), path):
+            raise AccessDenied('The evidence lies in a closed personal space.')
+        context.require(target.as_posix())
+        yield from read_text(self.alias, address, target, start, parameters['lines'], evidence.observed_at)
+
+    def read_commit(self, evidence, parameters, context):
+        repo, revision = self.source.repository(evidence.locator)
+        if repo is None or evidence.revision not in (None, revision):
+            yield Outcome(status='unsupported', code='incompatible_evidence')
+            return
+        files = [repo / name for name in git_source.git(repo, 'show', '--name-only', '--format=', revision).split('\n') if name]
+        if self.places.hidden({'repo': repo, 'files': files}):
+            raise AccessDenied('The commit lies in a closed personal space.')
+        context.require(*([name.resolve().as_posix() for name in files] if hides_path(self.bounds, repo) else [repo.as_posix()]))
+        text = git_source.git(repo, 'show', '--stat', '--format=%H%n%aI · %an%n%n%B', revision)
+        if not text:
+            yield Outcome(status='unavailable', code='revision_missing', message=f'No revision {revision} in {repo}.')
+            return
+        start = parameters['start'] or 1
+        rows = text.splitlines(keepends=True)[start - 1:start - 1 + parameters['lines'] + 1]
+        yield from window(self.alias, evidence.locator, rows, start, parameters['lines'], revision=revision)
+
+
+def hit_passage(evidence, hit):
+    return Passage(text=hit['excerpt'], evidence=[evidence], context={
+        'matched': hit['matched'], 'total': hit['total'], 'label': hit['label'], 'where': hit['where'],
+        'line': hit.get('line'), 'places': hit['places'], **hit['extra']})
+
+
+class FolderPlugin:
+    def __init__(self, alias, places):
+        self.alias, self.places = alias, places
+
+    def catalog(self):
+        return [Operation('search', 'Places where the query words occur under one folder, including its relocated archives.',
+                          FolderSearch),
+                Operation('read', 'Read a file place identified by evidence, with a continuation.', Read)]
+
+    def invoke(self, operation, parameters, inputs, context):
+        if operation == 'read':
+            yield from self.read(parameters, context)
+            return
+        words, since = words_of(parameters['query']), since_of(parameters['days'])
+        if not words:
+            yield EMPTY_QUERY
+            return
+        root = Path(parameters['root'])
+        if self.places.hidden(path=root):
+            raise AccessDenied('The folder lies in a closed personal space.')
+        try:
+            roots = recall_archive.search_roots(root)
+        except FileNotFoundError as error:
+            yield Outcome(status='unavailable', code='root_missing', message=str(error),
+                          next_steps=['Give an existing folder, or search the configured sources without root.'])
+            return
+        context.require(*sorted({path.as_posix() for path in roots}))
+        folder = notes_source.Plugin({'roots': [str(path) for path in roots], 'patterns': list(FOLDER_PATTERNS)})
+        coverage, hits = Coverage(roots, []), []
+        for hit in folder.search(words, since):
+            if not mentions(hit['where'], parameters['where']):
+                continue
+            path = Path(hit['locator'].split(' start=')[0])
+            if self.places.hidden(hit['bound'], path):
+                coverage.hidden += 1
+                continue
+            hits.append({**hit, 'path': path, 'extra': {'modified_at': iso(hit['time'])}})
+        for hit in ranked(hits, parameters['limit']):
+            yield hit_passage(Evidence(source=self.alias, locator=hit['locator'], observed_at=iso(modified(hit['path']))), hit)
+        yield coverage.outcome('folder')
+
+    def read(self, parameters, context):
+        evidence = Evidence.model_validate(parameters['evidence'])
+        if evidence.source != self.alias:
+            yield Outcome(status='unsupported', code='incompatible_evidence')
+            return
+        address, _, given = evidence.locator.partition(' start=')
+        path = Path(address)
+        target = recall_archive.resolve(path)
+        if self.places.hidden(path=path):
+            raise AccessDenied('The evidence lies in a closed personal space.')
+        if not target.is_file():
+            yield Outcome(status='unavailable', code='source_missing', message=f'{address} is missing.')
+            return
+        context.require(target.as_posix())
+        start = parameters['start'] or (int(given) if given.isdigit() else 1)
+        yield from read_text(self.alias, address, target, start, parameters['lines'], evidence.observed_at)
