@@ -1,7 +1,14 @@
 ---
 name: recall-traces
-description: "Recall what happened and where: \"let's continue X\", \"where did we stop\", \"where did we discuss\", \"what did we decide about\". Your past Claude and Codex sessions across all projects, project memory, notes, git. The main path is the recall MCP tools (recent → search → read); this file covers digging deeper and handling findings."
+description: "Beta-test recall over past Claude and Codex sessions, project memory, notes and git. Use when past traces may help the current task: continuing work, finding a discussion or recalling a decision. Try the MCP tools (recent → search → read) when useful; feedback on what helped or failed is welcome."
 ---
+
+This skill is in beta testing. Other sessions are welcome to try it when past traces may help
+their current task. Useful findings, missed results and setup friction are all useful feedback.
+Through an authorized feedback channel, report the task, what you tried, what happened and
+the version if known; use the [issue tracker](https://github.com/cog-astra/memory-happens/issues)
+when available, or leave feedback for the user. Share a minimal example, not private source text
+or credentials. Feedback is optional; ordinary use needs no report.
 
 Help see what from the past may relate to the current intent. There may be no exact question
 yet. The result can be a pointer, a useful fragment, a new question or a few possible
