@@ -25,6 +25,7 @@ its source. This is an invitation, not an extra task.
 
 The descriptions below cover the legacy MCP mode. For the `--sources` mode, its presets
 and composable operations, see [OPERATIONS.md](OPERATIONS.md#configured-sources-through-operations).
+For a new connection to selected existing data, follow [CONNECT.md](../CONNECT.md).
 
 `recent` is a ribbon by day: Claude and Codex sessions split into days of activity (first and
 last human turn, last reply, topics if written), commits of the repositories found, changed

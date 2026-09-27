@@ -9,6 +9,7 @@ Finding a matching passage is a lead; it does not establish the meaning of a dec
 
 **Try a first recall.** Give an agent (Claude Code or Codex) this repository's URL.
 [BOOTSTRAP.md](BOOTSTRAP.md) guides the first connection over a synthetic Git history.
+Already have material to recall? [CONNECT.md](CONNECT.md) guides connecting your chosen sources.
 
 **For an agent receiving this link:** briefly explain the project, then use BOOTSTRAP's
 read-only checks to offer a concrete demo setup for approval. Do not require the user to know
@@ -43,28 +44,28 @@ Python plugins run trusted code in the server process.
 
 ## Install and test
 
-For the guided first connection, use [BOOTSTRAP.md](BOOTSTRAP.md). For your own sources,
-the [configured-source mode](recall-traces/OPERATIONS.md#configured-sources-through-operations)
-uses `recall_mcp.py --sources /absolute/path/to/sources.json` and exposes the composable
-operations alongside `recent`, `search` and `read`. Register that command with your MCP
-client; running a stdio server in a terminal does not connect it to the client.
-
-The commands below start the legacy MCP mode, which remains available for existing setups.
-Its filtering still has known mixed-commit and junction-alias gaps
-([issue #38](https://github.com/cog-astra/memory-happens/issues/38)); do not rely on that mode
-to separate closed spaces from their guests. Use the configured-source mode for new setups.
+For the demo, use [BOOTSTRAP.md](BOOTSTRAP.md). For selected existing sources, use
+[CONNECT.md](CONNECT.md): configuration, first archive export where needed, client registration,
+search/read verification and removal. It uses `recall_mcp.py --sources /absolute/path/to/sources.json`.
+The [API reference](recall-traces/OPERATIONS.md#configured-sources-through-operations) describes
+the operations behind `recent`, `search` and `read`.
 
 Validated in an isolated Python 3.12 environment on Windows; other versions and platforms
 are untested. Embedded Python builds that ignore `PYTHONPATH` have a known test limitation
 ([issue #33](https://github.com/cog-astra/memory-happens/issues/33)).
 
 ```sh
+<python> -m pip install -r recall-traces/requirements.txt
 cd recall-traces/scripts
-python -m pip install -r ../requirements.txt
-python -m unittest                      # needs git on PATH
-cp sources.example.json sources.json    # edit the paths, or set RECALL_CONFIG to a config file
-python recall_mcp.py                    # MCP server over stdio
+<python> -m unittest
 ```
+
+Here `<python>` is the isolated environment from BOOTSTRAP; tests need Git on PATH.
+Running a stdio server in a terminal does not connect it to a client.
+The legacy mode (no mode flag) remains available for existing installations. Its known
+mixed-commit and junction-alias filtering gaps are tracked in
+[issue #38](https://github.com/cog-astra/memory-happens/issues/38); do not rely on it to separate
+closed spaces from guests. New setups should follow CONNECT.
 
 Optional parts:
 
