@@ -154,7 +154,7 @@ source configuration. Git evidence identifies a repository and revision; the con
 adapter reads commit messages and change statistics, matching the legacy source rather than
 the full-patch reader used by `--repo`.
 
-Session and commit times use `event_time`; file modification times use `modified_at`.
+Session and commit times in recent/search use `event_time`; file modification times use `modified_at`.
 Session recent results retain daily topics and archive metadata in passage context. Transform
 plugins can combine the sources without interpreting their evidence. Configuration is loaded
 when the server starts; boundary files are reloaded for each convenience or custom recipe call.
@@ -173,3 +173,27 @@ is passed to `Plugin(options)`; without options the loader uses `Plugin()` or th
 These are executable Python plugins, just like the selector; configure only trusted modules.
 They become available to custom `operation_run` recipes. The convenience recipes keep their
 existing behavior, and models or other dependencies are not installed by configuration loading.
+
+Notes and session sources also expose `passages(lines=40)`: all accessible file text in
+consecutive physical line windows, ordered by path and line. There is no query, age filter
+or candidate limit. The source's configured file enumeration and access boundaries still
+apply. A session window can cross message boundaries, so it carries `modified_at`, not an
+inferred `event_time`. Empty files emit no passages. Each window preserves a line address
+and observation time for the existing `read` operation.
+
+With the `fuzzy` configuration above, a custom recipe can select before returning text:
+
+```json
+[
+  {"name": "candidates", "plugin": "notes", "operation": "passages"},
+  {"name": "selected", "plugin": "fuzzy", "operation": "select",
+   "parameters": {"query": "gardens", "limit": 5}, "inputs": {"passages": "candidates"}}
+]
+```
+
+Use a configured session alias in the first step for archive text, or `selector` in the
+second step for literal selection. These recipes materialize all candidate records before
+selection; `lines` bounds each window's line count, not its characters or total memory use.
+The final `characters` budget does not bound intermediate text. `test_source_operations`
+checks old and deep text, selector replacement, evidence readback and access filtering on
+synthetic notes and session projections.

@@ -37,6 +37,10 @@ class Read(Value):
     lines: int = Field(default=80, ge=1)
 
 
+class Passages(Value):
+    lines: int = Field(default=40, ge=1)
+
+
 def iso(moment):
     return moment.isoformat() if moment else None
 
@@ -148,6 +152,11 @@ class Sessions:
             yield hit, Path(hit['locator'].split(' start=')[0]), {
                 'event_time' if hit['said'] else 'modified_at': iso(hit['time'])}
 
+    def files(self):
+        for path in sorted(set(self.legacy.paths())):
+            bound = self.bound(path)
+            yield path, bound, {'project': bound['path']}
+
     def owns(self, path, target):
         return target.suffix == '.md' and any(within(path, root) or within(target, root.resolve()) for root in self.roots())
 
@@ -205,6 +214,10 @@ class Notes:
     def search(self, words, since):
         for hit in self.legacy.search(words, since):
             yield hit, Path(hit['locator'].split(' start=')[0]), {'modified_at': iso(hit['time'])}
+
+    def files(self):
+        for path in sorted({path for _, path in self.legacy.paths()}):
+            yield path, self.bound(path), {}
 
     def owns(self, path, target):
         for root in self.roots():
@@ -292,10 +305,13 @@ class Plugin:
         self.source = KINDS[self.kind](options) if self.kind in KINDS else None
 
     def catalog(self):
-        return [Operation('recent', 'Traces of recent days from this source, newest first.', Recent),
-                Operation('search', 'Places where the query words occur, best matches first.', Search),
-                Operation('read', 'Read the place identified by evidence, with a continuation.', Read),
-                Operation('health', 'Warnings about missing or stale parts of this source.')]
+        operations = [Operation('recent', 'Traces of recent days from this source, newest first.', Recent),
+                      Operation('search', 'Places where the query words occur, best matches first.', Search),
+                      Operation('read', 'Read the place identified by evidence, with a continuation.', Read),
+                      Operation('health', 'Warnings about missing or stale parts of this source.')]
+        if self.kind in ('notes', 'sessions'):
+            operations.append(Operation('passages', 'Read all accessible text in line windows before selection.', Passages))
+        return operations
 
     def evidence(self, locator, path, revision=None):
         return Evidence(source=self.alias, locator=locator, revision=revision,
@@ -332,7 +348,21 @@ class Plugin:
                                   else [Path(path).resolve().as_posix()]))
             return True
 
-        if operation == 'recent':
+        if operation == 'passages':
+            for path, bound, extra in self.source.files():
+                if not admit(bound, path):
+                    continue
+                observed = iso(modified(path))
+                with path.open(encoding='utf-8-sig', errors='replace') as stream:
+                    start = 1
+                    while rows := list(itertools.islice(stream, parameters['lines'])):
+                        yield Passage(text=''.join(rows),
+                                      evidence=[Evidence(source=self.alias, locator=f'{path} start={start}',
+                                                         observed_at=observed)],
+                                      context={'first_line': start, 'last_line': start + len(rows) - 1,
+                                               'modified_at': observed, **extra})
+                        start += len(rows)
+        elif operation == 'recent':
             since = since_of(parameters['days'])
             found = []
             for trace, path, text, extra in self.source.recent(since):
