@@ -10,9 +10,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import recall_bounds
 import source_operations
+import trigram_selector
 from plugins import select_literal
 from recall_bounds import Bounds
 from recall_core import Recall
+from recall_recipe import run as run_recipe
 from recall_runner import Runner
 
 NOW = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0)
@@ -177,6 +179,82 @@ class SourceOperationsTest(unittest.TestCase):
         excluded = {**self.options['memory'], 'exclude': [recall_bounds.slug(self.work)]}
         records, outcome = self.run_op(self.runner(memory=excluded), 'memory', 'search', {'query': 'blue'})
         self.assertEqual((records, outcome['status']), ([], 'success'))
+
+    def test_passages_cover_old_and_deep_text_with_replaceable_selectors(self):
+        for path in (self.cape, self.claude):
+            with path.open('a', encoding='utf-8') as stream:
+                stream.write('\n' * 90 + 'The garden contains a barometer.\n')
+            old = (NOW - timedelta(days=540)).timestamp()
+            os.utime(path, (old, old))
+        for alias, path in (('notes', self.cape), ('sessions', self.claude)):
+            runner = self.runner()
+            candidates, outcome = self.run_op(runner, alias, 'passages')
+            windows = [r for r in candidates if r['evidence'][0]['locator'].startswith(f'{path} start=')]
+            self.assertEqual(''.join(r['text'] for r in windows), path.read_text(encoding='utf-8'))
+            self.assertTrue(all(r['context']['last_line'] - r['context']['first_line'] < 40 for r in windows))
+            self.assertEqual(windows[-1]['context']['last_line'], len(path.read_text(encoding='utf-8').splitlines()))
+            self.assertTrue(all(r['access'] and r['evidence'][0]['observed_at'] for r in windows))
+            for selector, expected in ((select_literal.Plugin(), 0), (trigram_selector, 1)):
+                runner.plugins['select'] = selector
+                recipe = [{'name': 'all', 'plugin': alias, 'operation': 'passages'},
+                          {'name': 'found', 'plugin': 'select', 'operation': 'select',
+                           'parameters': {'query': 'gardens', 'limit': 5}, 'inputs': {'passages': 'all'}}]
+                records, steps, result = run_recipe(runner, recipe)
+                self.assertEqual(steps[0]['records'], len(candidates))
+                self.assertEqual(len(records), expected)
+                self.assertIn(result.status, ('success', 'partial'))
+                for record in records:
+                    self.assertGreater(record['context']['first_line'], 80)
+                    evidence = json.loads(json.dumps(record['evidence'][0]))
+                    read, outcome = self.run_op(self.runner(), alias, 'read', {'evidence': evidence, 'lines': 40})
+                    self.assertEqual(read[0]['text'], record['text'])
+                    self.assertEqual(outcome['status'], 'success')
+                    self.assertTrue(record['lineage']['inputs'])
+
+    def test_passages_reuse_boundaries_before_emitting_candidates(self):
+        open_note, closed_note = self.friend / 'open' / 'n.md', self.friend / 'closed' / 'n.md'
+        open_note.write_text('Open garden\n', encoding='utf-8')
+        closed_note.write_text('Closed garden\n', encoding='utf-8')
+        runner = self.runner(notes={'plugin': 'notes', 'roots': [str(self.friend), str(self.corpus)]})
+        runner.policy = lambda resources: not any(self.bounds.hides(r) for r in resources)
+        for alias, excluded in (('notes', (closed_note, self.secret)), ('sessions', (self.secret,))):
+            records, outcome = self.run_op(runner, alias, 'passages', {'lines': 2})
+            paths = {r['evidence'][0]['locator'].split(' start=')[0] for r in records}
+            self.assertTrue(paths)
+            self.assertFalse(paths.intersection(map(str, excluded)))
+            self.assertIn(str(self.shared), paths)
+            if alias == 'notes':
+                self.assertIn(str(open_note), paths)
+            self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
+            for record in records:
+                self.assertEqual(self.run_op(runner, alias, 'read', {'evidence': record['evidence'][0]})[1]['status'],
+                                 'success')
+            for path in excluded:
+                evidence = {'source': alias, 'locator': f'{path} start=1'}
+                self.assertEqual(self.run_op(runner, alias, 'read', {'evidence': evidence})[1]['code'], 'access_denied')
+        runner.policy = lambda resources: False
+        self.assertEqual(self.run_op(runner, 'sessions', 'passages')[1]['code'], 'access_denied')
+
+    def test_passages_catalog_scope_validation_and_missing_source(self):
+        runner = self.runner()
+        self.assertEqual({op['plugin'] for op in runner.catalog() if op['name'] == 'passages'}, {'notes', 'sessions'})
+        for invalid in ({'query': 'garden'}, {'days': 7}, {'lines': 0}):
+            self.assertEqual(self.run_op(runner, 'notes', 'passages', invalid)[1]['code'], 'invalid_call')
+        gone = {'plugin': 'notes', 'roots': [str(self.base / 'gone')]}
+        records, outcome = self.run_op(self.runner(notes=gone), 'notes', 'passages')
+        self.assertEqual((records, outcome['status'], outcome['code']), ([], 'unavailable', 'source_missing'))
+
+    def test_passages_keep_file_enumeration_and_do_not_duplicate_overlapping_patterns(self):
+        (self.corpus / 'subagents').mkdir()
+        (self.corpus / 'subagents' / 'hidden.md').write_text('A hidden garden\n', encoding='utf-8')
+        (self.cape.parent / 'empty.md').touch()
+        options = {**self.options['notes'], 'patterns': ['*.md', 'C*.md']}
+        runner = self.runner(notes=options)
+        notes, outcome = self.run_op(runner, 'notes', 'passages')
+        self.assertEqual([r['evidence'][0]['locator'] for r in notes], [f'{self.cape} start=1'])
+        self.assertEqual(outcome['status'], 'success')
+        sessions, _ = self.run_op(runner, 'sessions', 'passages')
+        self.assertFalse(any('subagents' in r['evidence'][0]['locator'] for r in sessions))
 
     def test_times_keep_their_meaning_per_source(self):
         runner = self.runner()
