@@ -1,5 +1,4 @@
 import json
-import re
 import socket
 import sys
 import threading
@@ -34,22 +33,26 @@ class Stub(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         self.server.requests.append(body)
         mode = self.server.mode
-        if mode == 'missing':
-            payload = b'{"error":"model not found"}'
-            self.send_response(404)
+        context_error = {'error': {'code': 400, 'type': 'exceed_context_size_error',
+                                  'message': 'request (30036 tokens) exceeds the available context size (2048 tokens)',
+                                  'n_prompt_tokens': 30036, 'n_ctx': 2048}}
+        if mode in ('missing', 'input_long', 'other_error'):
+            error = ('model not found' if mode == 'missing' else json.dumps(context_error)
+                     if mode == 'input_long' else 'invalid context configuration')
+            payload = json.dumps({'error': error}).encode()
+            self.send_response(404 if mode == 'missing' else 400)
             self.send_header('Content-Length', str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
             return
-        text = body['messages'][-1]['content']
-        begin, end = re.search(r'BEGIN MARKER: (\w+)', text)[1], re.search(r'END MARKER: (\w+)', text)[1]
-        miscopied = end[:2] + ('e' if end[2] != 'e' else 'f') + end[3:]
-        reply = {'begin': end if mode == 'lost_begin' else begin, 'end': miscopied if mode == 'miscopy_end' else end,
-                 'answer': 'The lighthouse was painted blue.', 'cited': self.server.cited}
+        reply = {'answer': 'The lighthouse was painted blue.', 'cited': self.server.cited}
         content = 'not json' if mode == 'bad_json' else json.dumps(reply)
         self.send_response(200)
         self.send_header('Content-Type', 'application/x-ndjson')
         self.end_headers()
+        if mode == 'input_long_stream':
+            self.wfile.write(json.dumps({'error': json.dumps(context_error)}).encode() + b'\n')
+            return
         if mode in ('slow', 'endless'):
             self.wfile.write(json.dumps({'message': {'content': ''}, 'done': False}).encode() + b'\n')
             self.wfile.flush()
@@ -95,32 +98,26 @@ class OllamaReduceTest(unittest.TestCase):
                                                   INPUTS[0]['evidence'][0] | {'revision': None}])
         context = records[0]['context']
         self.assertEqual((context['relation'], context['cited'], context['inputs']), ('transformed', [2, 1], 3))
-        self.assertEqual(context['markers'], {'begin': 'echoed', 'end': 'echoed'})
+        self.assertNotIn('markers', context)
         self.assertEqual(context['input_characters'], sum(len(item['text']) for item in INPUTS))
         self.assertEqual((context['prompt_tokens'], context['output_tokens']), (321, 45))
         self.assertEqual(json.dumps(INPUTS, sort_keys=True), before)
         sent = self.server.requests[0]
         self.assertEqual(sent['model'], 'qwen-test')
         self.assertTrue(all(item['text'] in sent['messages'][-1]['content'] for item in INPUTS))
-        self.assertEqual(sent['format']['required'], ['begin', 'end', 'answer', 'cited'])
+        self.assertEqual(sent['format']['required'], ['answer', 'cited'])
+        self.assertIs(sent['truncate'], False)
 
-    def test_a_marker_mismatch_keeps_the_answer_but_not_the_claim_of_coverage(self):
-        matched, _ = self.run_reduce()
-        self.server.mode = 'miscopy_end'
+    def test_backend_context_refusal_is_distinct_from_other_errors(self):
+        for mode in ('input_long', 'input_long_stream'):
+            self.server.mode = mode
+            records, outcome = self.run_reduce()
+            self.assertEqual((records, outcome['status'], outcome['code']), ([], 'failed', 'model_input_too_large'))
+            self.assertIn('30036', outcome['message'])
+            self.assertIn('num_ctx', outcome['next_steps'][0])
+        self.server.mode = 'other_error'
         records, outcome = self.run_reduce()
-        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'marker_mismatch'))
-        self.assertIn('miscopied', outcome['message'])
-        self.assertIn('unknown', outcome['message'])
-        self.assertEqual((records[0]['text'], records[0]['evidence']), (matched[0]['text'], matched[0]['evidence']))
-        self.assertEqual(records[0]['context']['markers'], {'begin': 'echoed', 'end': 'differs'})
-        self.server.mode = 'lost_begin'
-        records, outcome = self.run_reduce()
-        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'marker_mismatch'))
-        self.assertIn('cut the start', outcome['message'])
-        self.assertEqual(records[0]['context']['markers'], {'begin': 'end_marker', 'end': 'echoed'})
-        self.server.mode, self.server.cited = 'miscopy_end', [9]
-        records, outcome = self.run_reduce()
-        self.assertEqual((records, outcome['code']), ([], 'invalid_citations'))
+        self.assertEqual((records, outcome['code']), ([], 'model_error'))
 
     def test_empty_input_does_not_call_the_model(self):
         records, outcome = self.run_reduce(inputs=[])
