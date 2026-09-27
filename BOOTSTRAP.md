@@ -95,7 +95,8 @@ The `--repo` mode connects the same tools to a chosen repository, but it is stil
 and not part of this first-connection path. A large patch can be read only whole, with a large
 enough `characters`.
 
-Recall over session archives, notes and project memory needs more setup; see
-[Install and test](README.md#install-and-test).
+To connect existing notes, repositories, project memory or session logs, continue with
+[Recall your own sources](CONNECT.md). It reuses this clone and environment, covers the first
+archive export where needed, and verifies a search and source read through the client.
 
 If a step fails or is unclear, open an issue. Say what you ran and what you saw.
