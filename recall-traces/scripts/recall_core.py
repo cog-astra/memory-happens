@@ -49,15 +49,16 @@ def scan(path, words, stamp=None):
             if not present:
                 continue
             day = said.astimezone().date() if stamp and said else None
-            group = groups.setdefault(day, {'matched': set(), 'total': 0, 'places': [], 'best': (0, '', 0, None)})
+            group = groups.setdefault(day, {'matched': set(), 'total': 0, 'lines': 0, 'places': [], 'best': (0, '', 0, None)})
             group['matched'].update(present)
             group['total'] += sum(folded.count(word) for word in present)
+            group['lines'] += 1
             if len(group['places']) < 5:
                 group['places'].append(number)
             if len(present) > group['best'][0]:
                 group['best'] = (len(present), line.strip(), number, said)
     return [{'matched': [word for word in words if word in group['matched']], 'total': group['total'],
-             'places': group['places'], 'excerpt': group['best'][1], 'line': group['best'][2],
+             'lines': group['lines'], 'places': group['places'], 'excerpt': group['best'][1], 'line': group['best'][2],
              'said': group['best'][3]} for group in groups.values()]
 
 
