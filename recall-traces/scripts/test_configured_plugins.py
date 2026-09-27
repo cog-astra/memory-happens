@@ -19,7 +19,7 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
 
                 class Plugin:
                     def __init__(self, options):
-                        self.prefix = options['prefix']
+                        self.prefix = options.get('prefix', 'Default: ')
 
                     def catalog(self):
                         return [Operation('join', 'Join supplied passages.', inputs=('passages',), requires_text=True)]
@@ -31,6 +31,7 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
                         yield Outcome(status='success')
                 '''), encoding='utf-8')
             cfg['operations'] = [{'name': 'joined', 'module': 'third_party', 'options': {'prefix': 'Combined: '}},
+                                 {'name': 'empty_options', 'module': 'third_party', 'options': {}},
                                  {'name': 'fuzzy', 'module': 'trigram_selector'}]
             path.write_text(json.dumps(cfg), encoding='utf-8')
             async with server('--sources', str(path), env={'PYTHONPATH': str(base)}) as session:
@@ -55,6 +56,9 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
                     bounded = await session.call_tool('operation_run', {'steps': steps, 'characters': 1})
                     self.assertEqual(bounded.structured_content['outcome']['code'], 'over_budget')
                     self.assertNotIn('records', bounded.structured_content)
+                steps[-1]['plugin'] = 'empty_options'
+                empty_options = await session.call_tool('operation_run', {'steps': steps, 'characters': 10000, 'view': 'passages'})
+                self.assertTrue(empty_options.structured_content['records'][0]['text'].startswith('Default: '))
                 preset = await session.call_tool('search', {'query': 'cache', 'characters': 30000})
                 self.assertNotIn('joined.join', json.dumps(preset.structured_content['steps']))
                 self.assertEqual({r['evidence'][0]['source'] for r in preset.structured_content['records']},
@@ -71,6 +75,7 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
     def test_invalid_plugin_and_ignored_options_are_not_silently_accepted(self):
         for entry in ({'name': 'bad/name', 'module': 'trigram_selector'},
                       {'name': 'x', 'module': 'trigram_selector', 'options': {'unused': True}},
+                      {'name': 'x', 'module': 'trigram_selector', 'options': {}},
                       {'name': 'x', 'module': 'json'},
                       {'name': 'x', 'module': 'trigram_selector', 'typo': True}):
             with self.subTest(entry=entry), self.assertRaises(ValueError):

@@ -61,9 +61,10 @@ class Configuration:
             raise ValueError('Operation names must be unique and must not replace sources or built-ins.')
         for entry in operations:
             module = importlib.import_module(entry.module)
+            has_options = 'options' in entry.model_fields_set
             if callable(getattr(module, 'Plugin', None)):
-                plugin = module.Plugin(entry.options) if entry.options else module.Plugin()
-            elif not entry.options:
+                plugin = module.Plugin(entry.options) if has_options else module.Plugin()
+            elif not has_options:
                 plugin = module
             else:
                 raise ValueError(f'{entry.module} needs a Plugin factory to accept options.')
