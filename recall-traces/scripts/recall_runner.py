@@ -124,7 +124,9 @@ class Runner:
                 try:
                     stream.close()
                 except Exception:
-                    terminal = Outcome(status='failed', code='close_failed')
+                    trace['close_failed'] = True
+                    if terminal is None or terminal.status != 'cancelled':
+                        terminal = Outcome(status='failed', code='close_failed')
             trace['outcome'] = terminal.status if terminal is not None else 'cancelled'
             trace['code'] = terminal.code if terminal is not None else 'consumer_closed'
         yield {'type': 'outcome', 'invocation': invocation, 'records': count,

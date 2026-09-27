@@ -247,6 +247,8 @@ def recall(root, source, cue='', limit=4, scan=80, characters=16000, since=None,
 
 
 def main():
+    sys.stdout.reconfigure(encoding='utf-8', newline='\n')
+    sys.stderr.reconfigure(encoding='utf-8', newline='\n')
     parser = argparse.ArgumentParser(
         description='Find Git source candidates, file history or filename mentions within an output budget.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -296,7 +298,6 @@ Recall planning (caller judgment, not implemented by this CLI):
                         else render_overview(result, args.characters))
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, str(error) + '\n')
-    sys.stdout.reconfigure(newline='\n')
     print(rendered)
 
 

@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 
 from pydantic import Field, ValidationError
 
@@ -13,15 +14,16 @@ class Step(Value):
     operation: str = Field(pattern=r'^[A-Za-z0-9_.-]{1,60}$')
     parameters: dict = Field(default_factory=dict)
     inputs: dict[str, str | list[dict]] = Field(default_factory=dict)
+    on_error: Literal['stop', 'continue'] = 'stop'
 
 
-def invalid(message):
+def invalid(message, max_steps=MAX_STEPS):
     return [], [], Outcome(status='failed', code='invalid_recipe', message=message,
-                           next_steps=['Give 1-10 uniquely named steps; an input port names an earlier step '
+                           next_steps=[f'Give 1-{max_steps} uniquely named steps; an input port names an earlier step '
                                        'or holds a list of complete records.'])
 
 
-def run(runner, steps):
+def run(runner, steps, *, max_steps=MAX_STEPS):
     """Runs a finite recipe: each port takes the records of an earlier step, so they never leave the call.
 
     Returns the last step's records, a summary of every step that ran, and the recipe's outcome."""
@@ -29,15 +31,15 @@ def run(runner, steps):
         steps = [Step.model_validate(step) for step in steps]
     except ValidationError as error:
         first = error.errors()[0]
-        return invalid(f'Invalid step field {".".join(map(str, first["loc"]))}: {first["msg"]}')
-    if not 1 <= len(steps) <= MAX_STEPS:
-        return invalid(f'A recipe has 1-{MAX_STEPS} steps, not {len(steps)}.')
+        return invalid(f'Invalid step field {".".join(map(str, first["loc"]))}: {first["msg"]}', max_steps)
+    if not 1 <= len(steps) <= max_steps:
+        return invalid(f'A recipe has 1-{max_steps} steps, not {len(steps)}.', max_steps)
     names = set()
     for step in steps:
         unknown = [source for source in step.inputs.values() if isinstance(source, str) and source not in names]
         if step.name in names or unknown:
             return invalid(f'Step {step.name}: ' + (f'input names no earlier step: {unknown[0]}' if unknown
-                                                    else 'name is used twice'))
+                                                    else 'name is used twice'), max_steps)
         names.add(step.name)
 
     outputs, summaries, partial = {}, [], None
@@ -50,7 +52,13 @@ def run(runner, steps):
                           'parameters': step.parameters, 'records': len(records),
                           'outcome': outcome.model_dump(), 'time': timeline(records)})
         if outcome.status not in ('success', 'partial'):
-            return [], summaries, attributed(step, outcome)
+            if step.on_error == 'stop' or outcome.status == 'cancelled':
+                return [], summaries, attributed(step, outcome)
+            records = []
+            if partial is None:
+                partial = Outcome(status='partial', code='incomplete_sources',
+                                  message=f'Step {step.name}: {outcome.status}/{outcome.code}. Inspect step outcomes.',
+                                  next_steps=outcome.next_steps)
         if outcome.status == 'partial' and partial is None:
             partial = attributed(step, outcome)
         outputs[step.name] = records

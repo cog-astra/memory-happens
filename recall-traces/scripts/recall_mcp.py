@@ -186,13 +186,19 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--demo', action='store_true', help='Use a temporary synthetic Git history; no personal sources')
     mode.add_argument('--repo', type=Path, help='Connect operations to this Git repository only')
+    mode.add_argument('--sources', type=Path, help='Connect configured sources through composable operations')
     parser.add_argument('--selector', default='plugins.select_literal', help='Trusted selector module for --demo or --repo')
     args = parser.parse_args()
     if (args.demo or args.repo is not None) and shutil.which('git') is None:
         parser.error('Git is required for --demo and --repo. Install Git and make it available on PATH.')
     if sys.stdin.isatty():
         print('This is an MCP stdio server. Register this command in your MCP client; see BOOTSTRAP.md. Waiting for client input.', file=sys.stderr)
-    if args.demo or args.repo is not None:
+    if args.sources is not None:
+        from configured_operations import create_server as configured
+        if not args.sources.is_file():
+            parser.error('--sources must name an existing source configuration JSON file.')
+        configured(args.sources, selector=args.selector).run()
+    elif args.demo or args.repo is not None:
         from operation_mcp import create_server as operations
         if args.demo:
             from demo_operations import fixture
