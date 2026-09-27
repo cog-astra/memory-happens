@@ -13,8 +13,8 @@ This first connection covers the demo only.
 - Your client: `claude --version` for Claude Code, `codex --version` for Codex.
 - `claude mcp get recall-demo` or `codex mcp get recall-demo`: if it is already registered,
   tell the human instead of adding a second one.
-- The repository is private for now: `git ls-remote https://github.com/cog-astra/memory-happens`
-  must succeed. If it fails, tell the human that access is needed, and stop.
+- Check repository connectivity with `git ls-remote https://github.com/cog-astra/memory-happens`.
+  The repository is public; no GitHub account is required. If this fails, report the error and stop.
 
 ## 2. Ask once, before any change
 
