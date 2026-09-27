@@ -49,7 +49,10 @@ class Configuration:
         self.plugins['collect'] = Collection(self.entries)
 
     def runner(self):
-        return Runner(self.plugins, policy=lambda resources: all(not self.bounds.hides(path) for path in resources))
+        roots = {root.resolve() for alias in self.entries
+                 if self.plugins[alias].source is not None for root in self.plugins[alias].source.roots()}
+        return Runner(self.plugins, policy=lambda resources: all(
+            Path(path).resolve() in roots or not self.bounds.hides(path) for path in resources))
 
     def recipe(self, operation, parameters, limit=None):
         names = {alias: f'source_{index}' for index, alias in enumerate(self.entries)}
@@ -62,14 +65,16 @@ class Configuration:
         return steps
 
     def evidence(self, path):
-        target = path.removeprefix('read: ').split(' start=')[0]
+        locator = path.removeprefix('read: ')
+        target = locator.split(' start=')[0]
         for alias, entry in self.entries.items():
             if entry['plugin'] == 'git' and re.match(r'^.+@[0-9a-fA-F]{6,40}$', target):
-                return {'source': alias, 'locator': path}
+                if self.plugins[alias].source.repository(target)[0] is not None:
+                    return {'source': alias, 'locator': locator}
             roots = entry.get('roots', []) + [store['corpus'] for store in entry.get('stores', [])]
             if any(Path(target).resolve().is_relative_to(Path(root).resolve()) for root in roots):
-                return {'source': alias, 'locator': path}
-        return {'source': 'folder', 'locator': path}
+                return {'source': alias, 'locator': locator}
+        return {'source': 'folder', 'locator': locator}
 
 
 def create_server(config_path, reader=None, selector='plugins.select_literal'):
@@ -120,7 +125,7 @@ def create_server(config_path, reader=None, selector='plugins.select_literal'):
         characters: Annotated[int, Field(ge=1)],
         evidence: dict | None = None,
         path: str | None = None,
-        start: Annotated[int, Field(ge=1)] = 1,
+        start: Annotated[int | None, Field(ge=1)] = None,
         lines: Annotated[int, Field(ge=1)] = 80,
     ) -> CallToolResult:
         if (evidence is None) == (path is None):

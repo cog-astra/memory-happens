@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -86,7 +87,7 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 found = await self.call(session, 'search', query='cache', characters=30000)
                 self.assertEqual(found['outcome']['status'], 'partial')
                 self.assertTrue(found['records'])
-                steps = [{'name': 'notes', 'plugin': 'notes', 'operation': 'search', 'parameters': {'query': 'cache'}},
+                steps = [{'name': 'notes', 'plugin': 'notes', 'operation': 'search', 'parameters': {'query': 'cache stale'}},
                          {'name': 'sessions', 'plugin': 'sessions', 'operation': 'search', 'parameters': {'query': 'cache revision'}},
                          {'name': 'merge', 'plugin': 'collect', 'operation': 'collect',
                           'inputs': {'notes': 'notes', 'sessions': 'sessions', 'memory': [], 'git': [], 'missing': []}},
@@ -109,6 +110,24 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 result = await self.call(session, 'search', query='cache', characters=30000)
                 self.assertEqual(result['outcome']['status'], 'success')
                 self.assertEqual({r['evidence'][0]['source'] for r in result['records']}, {f'notes_{i}' for i in range(10)})
+
+    async def test_legacy_addresses_keep_their_window_and_choose_the_connected_git_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            path, cfg, notes, _ = fixture(base)
+            second = base / 'second'
+            second.mkdir()
+            git(second, 'init', '-q')
+            commit(second, 'notes.txt', 'A second repository.\n', 'Distinct second repository decision')
+            revision = subprocess.check_output(['git', '-C', str(second), 'rev-parse', 'HEAD'], text=True).strip()
+            cfg['sources'].append({'plugin': 'git', 'name': 'second_git', 'repos': [str(second)]})
+            path.write_text(json.dumps(cfg), encoding='utf-8')
+            async with server('--sources', str(path)) as session:
+                detail = await self.call(session, 'read', path=f'read: {notes / "cache.md"} start=2', lines=1, characters=10000)
+                self.assertEqual(detail['records'][0]['text'], 'The cache was stale.\n')
+                found = await self.call(session, 'read', path=f'read: {second}@{revision}', characters=10000)
+                self.assertIn('Distinct second repository decision', found['records'][0]['text'])
+                self.assertEqual(found['records'][0]['evidence'][0]['source'], 'second_git')
 
 
 if __name__ == '__main__':
