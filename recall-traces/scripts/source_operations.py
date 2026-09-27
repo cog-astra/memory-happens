@@ -392,10 +392,10 @@ class Plugin:
         if repo is None or evidence.revision not in (None, revision):
             yield Outcome(status='unsupported', code='incompatible_evidence')
             return
-        files = git_source.git(repo, 'show', '--name-only', '--format=', revision).split('\n')
-        if self.places.hidden({'repo': repo, 'files': [repo / name for name in files if name]}):
+        files = [repo / name for name in git_source.git(repo, 'show', '--name-only', '--format=', revision).split('\n') if name]
+        if self.places.hidden({'repo': repo, 'files': files}):
             raise AccessDenied('The commit lies in a closed personal space.')
-        context.require(repo.as_posix())
+        context.require(*([name.resolve().as_posix() for name in files] if hides_path(self.bounds, repo) else [repo.as_posix()]))
         text = git_source.git(repo, 'show', '--stat', '--format=%H%n%aI · %an%n%n%B', revision)
         if not text:
             yield Outcome(status='unavailable', code='revision_missing', message=f'No revision {revision} in {repo}.')
