@@ -19,7 +19,7 @@ Our [vision and design principles](VISION.md) explain why we build recall from t
 how we treat evidence and attention, and what would count as useful memory.
 The [FAQ](FAQ.md) explores plugins, recall workflows, model-assisted understanding
 and the limits of what a trace can tell us.
-The [operation contract](ARCHITECTURE.md) describes the architecture and its acceptance checks.
+The [operation design](ARCHITECTURE.md) records the proposal and its acceptance checks.
 The [implemented operations](recall-traces/OPERATIONS.md) document the experimental API,
 configured sources and optional model-assisted processing.
 
@@ -54,7 +54,9 @@ Its filtering still has known mixed-commit and junction-alias gaps
 ([issue #38](https://github.com/cog-astra/memory-happens/issues/38)); do not rely on that mode
 to separate closed spaces from their guests. Use the configured-source mode for new setups.
 
-Tested with Python 3.12 on Windows; other versions and platforms are untested.
+Validated in an isolated Python 3.12 environment on Windows; other versions and platforms
+are untested. Embedded Python builds that ignore `PYTHONPATH` have a known test limitation
+([issue #33](https://github.com/cog-astra/memory-happens/issues/33)).
 
 ```sh
 cd recall-traces/scripts
