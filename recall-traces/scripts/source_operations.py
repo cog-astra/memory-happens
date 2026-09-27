@@ -301,15 +301,26 @@ class Plugin:
         if not coverage.present:
             yield coverage.outcome(self.kind)
             return
-        context.require(*sorted({root.resolve().as_posix() for root in coverage.present}))
+        closed = [root.resolve() for root in coverage.present if hides_path(self.bounds, root)]
+        context.require(*sorted({root.resolve().as_posix() for root in coverage.present if root.resolve() not in closed}))
+
+        def admit(bound, path):
+            if hidden(self.bounds, bound):
+                coverage.hidden += 1
+                return False
+            place = Path(bound['repo']) if 'files' in bound else path
+            if place is not None and any(within(place, root) for root in closed):
+                context.require(*([Path(name).resolve().as_posix() for name in bound['files']] if 'files' in bound
+                                  else [Path(path).resolve().as_posix()]))
+            return True
+
         if operation == 'recent':
             since = since_of(parameters['days'])
             found = []
             for trace, path, text, extra in self.source.recent(since):
                 if trace['time'] < since or not mentions(trace['where'], parameters['where']):
                     continue
-                if hidden(self.bounds, trace['bound']):
-                    coverage.hidden += 1
+                if not admit(trace['bound'], path):
                     continue
                 found.append((trace['time'], Passage(
                     text=text, evidence=[self.evidence(trace['locator'], path, extra.get('revision'))],
@@ -326,8 +337,7 @@ class Plugin:
             for hit, path, extra in self.source.search(words, since):
                 if (since and hit['time'] < since) or not mentions(hit['where'], parameters['where']):
                     continue
-                if hidden(self.bounds, hit['bound']):
-                    coverage.hidden += 1
+                if not admit(hit['bound'], path):
                     continue
                 hits.append({**hit, 'path': path, 'extra': extra})
             for hit in ranked(hits, parameters['limit']):

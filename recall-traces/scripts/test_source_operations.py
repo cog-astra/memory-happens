@@ -248,6 +248,21 @@ class SourceOperationsTest(unittest.TestCase):
         refused = self.run_op(runner, 'folder', 'search', {'query': 'lighthouse', 'root': str(self.friend / 'closed')})
         self.assertEqual(refused[1]['code'], 'access_denied')
 
+    def test_a_closed_root_hides_its_items_without_refusing_the_open_ones(self):
+        (self.friend / 'open' / 'n.md').write_text('an open lighthouse note\n', encoding='utf-8')
+        (self.friend / 'closed' / 'n.md').write_text('a closed lighthouse note\n', encoding='utf-8')
+        options = {'notes': {'plugin': 'notes', 'roots': [str(self.base / 'vault'), str(self.friend)]},
+                   'git': {'plugin': 'git', 'repos': [str(self.work), str(self.friend)]}}
+        plugins = {alias: source_operations.Plugin(alias, entry, self.bounds) for alias, entry in options.items()}
+        runner = Runner(plugins, policy=lambda resources: not any(self.bounds.hides(r) for r in resources))
+        records, outcome = self.run_op(runner, 'notes', 'search', {'query': 'lighthouse'})
+        self.assertEqual({r['evidence'][0]['locator'].split(' start=')[0] for r in records},
+                         {str(self.cape), str(self.friend / 'open' / 'n.md')})
+        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
+        records, outcome = self.run_op(runner, 'git', 'search', {'query': 'lighthouse'})
+        self.assertEqual({r['evidence'][0]['revision'] for r in records}, {self.painted, self.opened})
+        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
+
     def test_a_denying_policy_refuses_the_whole_source(self):
         plugins = {'notes': source_operations.Plugin('notes', self.options['notes'], self.bounds)}
         outcome = self.run_op(Runner(plugins, policy=lambda resources: False), 'notes', 'search', {'query': 'lighthouse'})[1]
