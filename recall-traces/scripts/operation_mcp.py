@@ -56,8 +56,11 @@ def project(record, view):
         return record
     if view == 'passages':
         return {key: record[key] for key in ('text', 'evidence', 'context')}
-    return {'headline': headline(record['text']), 'event_time': record['context'].get('event_time'),
-            'evidence': record['evidence']}
+    result = {'headline': headline(record['text']), 'event_time': record['context'].get('event_time'),
+              'evidence': record['evidence']}
+    if 'modified_at' in record['context']:
+        result['modified_at'] = record['context']['modified_at']
+    return result
 
 
 def brief(outcome):
@@ -95,13 +98,29 @@ def create_server(repo, selector='plugins.select_literal'):
         return Runner(plugins, policy=lambda resources: all(
             Path(resource).resolve().is_relative_to(root) for resource in resources))
 
-    server = MCPServer('recall', instructions=INSTRUCTIONS)
+    return create_operation_server(runner)
+
+
+def reply(records, summaries, outcome, characters, view='first_look', trace=None):
+    result = {'outcome': outcome.model_dump(), 'steps': summaries, 'view': view,
+              'records': [project(record, view) for record in records]}
+    if trace is not None:
+        result['trace'] = trace
+    result['size'] = {'characters': 0, 'limit': characters}
+    text = encode(result)
+    if len(text) > characters:
+        text = encode(over_budget(result, len(text), characters))
+    return CallToolResult(content=[TextContent(type='text', text=text)], structured_content=json.loads(text))
+
+
+def create_operation_server(runner, instructions=INSTRUCTIONS, run_description=RUN):
+    server = MCPServer('recall', instructions=instructions)
 
     @server.tool(structured_output=True, description='List the connected operations, parameter schemas and input ports. Start here to compose a recipe for operation_run.')
     def operation_catalog() -> dict[str, Any]:
         return {'operations': runner().catalog()}
 
-    @server.tool(description=RUN)
+    @server.tool(description=run_description)
     def operation_run(
         steps: Annotated[list[dict], Field(description='Ordered steps {name, plugin, operation, parameters?, inputs?}. '
                                            'An input port holds the name of an earlier step, or a list of complete records.')],
@@ -114,15 +133,6 @@ def create_server(repo, selector='plugins.select_literal'):
     ) -> CallToolResult:
         execution = runner()
         records, summaries, outcome = recall_recipe.run(execution, steps)
-        result = {'outcome': outcome.model_dump(), 'steps': summaries, 'view': view,
-                  'records': [project(record, view) for record in records]}
-        if trace:
-            result['trace'] = execution.trace
-        result['size'] = {'characters': 0, 'limit': characters}
-        text = encode(result)
-        # The fixed-shape summary is returned even when it alone exceeds a very small budget.
-        if len(text) > characters:
-            text = encode(over_budget(result, len(text), characters))
-        return CallToolResult(content=[TextContent(type='text', text=text)], structured_content=json.loads(text))
+        return reply(records, summaries, outcome, characters, view, execution.trace if trace else None)
 
     return server

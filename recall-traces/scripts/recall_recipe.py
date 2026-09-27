@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 
 from pydantic import Field, ValidationError
 
@@ -13,6 +14,7 @@ class Step(Value):
     operation: str = Field(pattern=r'^[A-Za-z0-9_.-]{1,60}$')
     parameters: dict = Field(default_factory=dict)
     inputs: dict[str, str | list[dict]] = Field(default_factory=dict)
+    on_error: Literal['stop', 'continue'] = 'stop'
 
 
 def invalid(message):
@@ -50,7 +52,13 @@ def run(runner, steps):
                           'parameters': step.parameters, 'records': len(records),
                           'outcome': outcome.model_dump(), 'time': timeline(records)})
         if outcome.status not in ('success', 'partial'):
-            return [], summaries, attributed(step, outcome)
+            if step.on_error == 'stop' or outcome.status == 'cancelled':
+                return [], summaries, attributed(step, outcome)
+            records = []
+            if partial is None:
+                partial = Outcome(status='partial', code='incomplete_sources',
+                                  message=f'Step {step.name}: {outcome.status}/{outcome.code}. Inspect step outcomes.',
+                                  next_steps=outcome.next_steps)
         if outcome.status == 'partial' and partial is None:
             partial = attributed(step, outcome)
         outputs[step.name] = records
