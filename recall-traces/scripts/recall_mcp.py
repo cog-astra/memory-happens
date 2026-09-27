@@ -110,9 +110,12 @@ def render_recent(traces, characters):
 
 def hit_block(hit, words):
     head = f"{local(hit['time']):%Y-%m-%d %H:%M} · {hit['label']} · [{', '.join(hit['matched'])}] ×{hit['total']}\n"
-    places = ', '.join(map(str, hit['places']))
-    body = f"  lines {places} | {around(hit['excerpt'], words)}\n" if places else f"  {line(hit['excerpt'])}\n"
-    return head + body + f"  read: {hit['locator']}\n"
+    if not hit['places']:
+        return head + f"  {line(hit['excerpt'])}\n" + f"  read: {hit['locator']}\n"
+    also = [place for place in hit['places'] if place != hit['line']]
+    more = hit['lines'] - 1 - len(also)
+    tail = (f" · also {', '.join(map(str, also))}" if also else '') + (f" +{more} more" if more else '')
+    return head + f"  line {hit['line']} | {around(hit['excerpt'], words)}{tail}\n" + f"  read: {hit['locator']}\n"
 
 
 def render_search(found, words, limit, characters):

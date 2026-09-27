@@ -231,6 +231,17 @@ class RecallTest(unittest.TestCase):
         hits = dict(self.recall().search_folder(self.space, ['game']))[f'folder {self.space}']
         self.assertEqual([Path(hit['locator'].split(' start=')[0]).parent.name for hit in hits], ['open'])
 
+    def test_search_hit_names_the_excerpt_line_and_counts_what_it_left_out(self):
+        rows = ['filler'] * 200
+        for number in range(10, 80, 10):
+            rows[number - 1] = 'alpha'
+        rows[199] = 'alpha beta'
+        (self.base / 'vault' / 'Log.md').write_text('\n'.join(rows) + '\n', encoding='utf-8')
+        text = recall_mcp.render_search(self.recall().search_folder(self.base / 'vault', ['alpha', 'beta']),
+                                        ['alpha', 'beta'], 8, 5000)
+        self.assertIn('line 200 | alpha beta · also 10, 20, 30, 40, 50 +2 more\n', text)
+        self.assertIn('Log.md start=200\n', text)
+
     def test_new_source_plugs_in_without_touching_the_core(self):
         plugin = self.base / 'diary.py'
         plugin.write_text(PLUGIN, encoding='utf-8')
