@@ -19,6 +19,10 @@ These are two directions of work. Retain available context through ordinary tool
 where the cost is justified. Improve how we find, connect and read what remains.
 A new reader can make an old trace useful for a question its author never anticipated.
 
+Our direction is **exact records, reconstructed readings**: preserve what was
+recorded, and assemble its relevance anew for the present question. Exactness here
+means fidelity to the record, not a guarantee that its author was right.
+
 The circumstances of origin matter: who acted and in what capacity, when, what
 was known, and what question an action answered. Preserve what is available;
 leave gaps as gaps. This is context to recover, not a form everyone must fill in.
