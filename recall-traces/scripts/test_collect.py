@@ -49,6 +49,43 @@ class CollectionTest(unittest.TestCase):
         self.assertEqual((outcome.status, outcome.code), ('partial', 'incomplete_sources'))
         self.assertEqual(summaries[0]['outcome']['status'], 'unavailable')
 
+    def test_cancellation_stops_collection_even_when_cleanup_fails(self):
+        class Source:
+            def catalog(self):
+                return [Operation('read', 'Fixture source.')]
+
+            def invoke(self, operation, parameters, inputs, context):
+                try:
+                    context.cancelled.set()
+                    yield Passage(text='cancelled')
+                finally:
+                    raise RuntimeError('cleanup failed')
+
+        runner = Runner({'source': Source()})
+        steps = [{'name': 'first', 'plugin': 'source', 'operation': 'read', 'on_error': 'continue'},
+                 {'name': 'never', 'plugin': 'source', 'operation': 'read'}]
+        records, summaries, outcome = run(runner, steps)
+        self.assertEqual((records, len(summaries), outcome.status), ([], 1, 'cancelled'))
+        self.assertTrue(runner.trace[0]['close_failed'])
+
+    def test_internal_recipe_can_cover_more_sources_without_relaxing_custom_calls(self):
+        class Source:
+            def catalog(self):
+                return [Operation('read', 'Fixture source.')]
+
+            def invoke(self, operation, parameters, inputs, context):
+                yield Passage(text='found')
+                yield Outcome(status='success')
+
+        aliases = [f's{i}' for i in range(12)]
+        runner = Runner({'source': Source(), 'collect': Plugin(aliases)})
+        steps = [{'name': alias, 'plugin': 'source', 'operation': 'read'} for alias in aliases]
+        steps.append({'name': 'all', 'plugin': 'collect', 'operation': 'collect',
+                      'inputs': {alias: alias for alias in aliases}})
+        self.assertEqual(run(runner, steps)[2].code, 'invalid_recipe')
+        records, summaries, outcome = run(runner, steps, max_steps=len(aliases) + 1)
+        self.assertEqual((len(records), len(summaries), outcome.status), (12, 13, 'success'))
+
 
 if __name__ == '__main__':
     unittest.main()

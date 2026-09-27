@@ -84,7 +84,7 @@ def create_server(config_path, reader=None, selector='plugins.select_literal'):
     server = create_operation_server(runner, INSTRUCTIONS, RUN)
 
     def execute(configuration, steps, characters, view):
-        records, summaries, outcome = run(configuration.runner(), steps)
+        records, summaries, outcome = run(configuration.runner(), steps, max_steps=len(configuration.entries) + 1)
         return reply(records, summaries, outcome, characters, view)
 
     @server.tool(description='Recent activity across configured sources, through their operations. Time is event time where known; file changes are modification time.')
