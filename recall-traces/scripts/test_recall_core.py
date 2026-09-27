@@ -242,6 +242,13 @@ class RecallTest(unittest.TestCase):
         self.assertIn('line 200 | alpha beta · also 10, 20, 30, 40, 50 +2 more\n', text)
         self.assertIn('Log.md start=200\n', text)
 
+    def test_hits_made_by_external_plugins_render_without_the_newer_fields(self):
+        hit = {'time': datetime.now(timezone.utc), 'label': 'synthetic', 'matched': ['alpha'], 'total': 2,
+               'places': [2, 4], 'line': 2, 'excerpt': 'alpha', 'locator': 'synthetic start=2'}
+        self.assertIn('  line 2 | alpha · also 4\n', recall_mcp.hit_block(hit, ['alpha']))
+        del hit['line']
+        self.assertIn('  lines 2, 4 | alpha\n', recall_mcp.hit_block(hit, ['alpha']))
+
     def test_new_source_plugs_in_without_touching_the_core(self):
         plugin = self.base / 'diary.py'
         plugin.write_text(PLUGIN, encoding='utf-8')
