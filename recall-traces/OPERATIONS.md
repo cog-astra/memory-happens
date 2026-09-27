@@ -159,3 +159,16 @@ plugins can combine the sources without interpreting their evidence. Configurati
 when the server starts; boundary files are reloaded for each convenience or custom recipe call.
 This mode does not install or schedule archive writers, update another MCP registration, or
 replace the separately running legacy server.
+
+Additional trusted Python operation plugins can be connected in the same configuration:
+
+```json
+{"operations": [{"name": "fuzzy", "module": "trigram_selector"}]}
+```
+
+Each entry names an importable module and a unique catalog alias. An optional `options` object
+is passed to `Plugin(options)`; without options the loader uses `Plugin()` or the module's own
+`catalog` and `invoke`. Names cannot replace a source, `folder`, `selector` or `collect`.
+These are executable Python plugins, just like the selector; configure only trusted modules.
+They become available to custom `operation_run` recipes. The convenience recipes keep their
+existing behavior, and models or other dependencies are not installed by configuration loading.

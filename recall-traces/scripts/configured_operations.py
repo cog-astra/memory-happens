@@ -11,7 +11,7 @@ from operation_mcp import create_operation_server, reply
 from plugins.collect import Plugin as Collection
 from recall_bounds import Bounds
 from recall_core import load_config
-from recall_operations import Outcome
+from recall_operations import Outcome, Value
 from recall_recipe import run
 from recall_runner import Runner
 
@@ -27,6 +27,12 @@ RUN = '''Run connected source and transform operations from operation_catalog.
 Each step has name, plugin, operation, parameters and inputs. An input port names an earlier step.
 Independent source steps may set on_error="continue" to collect other sources while reporting partial coverage.
 Without that option failures stop the recipe; cancellation always stops. Only the last step is returned.'''
+
+
+class ConfiguredOperation(Value):
+    name: str = Field(pattern=r'^[A-Za-z0-9_.-]{1,40}$')
+    module: str = Field(min_length=1)
+    options: dict = Field(default_factory=dict)
 
 
 class Configuration:
@@ -49,6 +55,22 @@ class Configuration:
         module = importlib.import_module(selector)
         self.plugins['selector'] = module if callable(getattr(module, 'catalog', None)) else module.Plugin()
         self.plugins['collect'] = Collection(self.entries)
+        operations = [ConfiguredOperation.model_validate(entry) for entry in cfg.get('operations', [])]
+        names = [entry.name for entry in operations]
+        if len(set(names)) != len(names) or set(names) & self.plugins.keys():
+            raise ValueError('Operation names must be unique and must not replace sources or built-ins.')
+        for entry in operations:
+            module = importlib.import_module(entry.module)
+            has_options = 'options' in entry.model_fields_set
+            if callable(getattr(module, 'Plugin', None)):
+                plugin = module.Plugin(entry.options) if has_options else module.Plugin()
+            elif not has_options:
+                plugin = module
+            else:
+                raise ValueError(f'{entry.module} needs a Plugin factory to accept options.')
+            if not all(callable(getattr(plugin, method, None)) for method in ('catalog', 'invoke')):
+                raise ValueError(f'{entry.module} must supply catalog and invoke.')
+            self.plugins[entry.name] = plugin
 
     def runner(self):
         return Runner(self.plugins, policy=lambda resources: all(not self.bounds.hides(path) for path in resources))
