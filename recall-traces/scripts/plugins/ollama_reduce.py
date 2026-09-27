@@ -38,14 +38,16 @@ def prompt(question, records, begin, end):
 class Plugin:
     def __init__(self, options=None):
         """options come from trusted configuration: model (required), endpoint, timeout seconds,
-        num_ctx, think, keep_alive, temperature."""
+        num_ctx, num_predict, temperature, think, keep_alive."""
         options = dict(options or {})
         if not options.get('model'):
             raise ValueError('ollama_reduce needs a model in its configuration')
+        if 'num_predict' in options and not (type(options['num_predict']) is int and options['num_predict'] > 0):
+            raise ValueError('num_predict must be a positive integer')
         self.model = options['model']
         self.endpoint = options.get('endpoint', ENDPOINT).rstrip('/')
         self.timeout = float(options.get('timeout', 900))
-        self.options = {key: options[key] for key in ('num_ctx', 'temperature') if key in options}
+        self.options = {key: options[key] for key in ('num_ctx', 'num_predict', 'temperature') if key in options}
         self.extra = {key: options[key] for key in ('think', 'keep_alive') if key in options}
 
     def catalog(self):

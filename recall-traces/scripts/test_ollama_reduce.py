@@ -137,9 +137,13 @@ class OllamaReduceTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 5)
 
     def test_model_and_settings_come_only_from_configuration(self):
-        self.run_reduce(num_ctx=8192, think=False, keep_alive='10m')
+        self.run_reduce(num_ctx=8192, num_predict=1024, temperature=0, think=False, keep_alive='10m')
         sent = self.server.requests[0]
-        self.assertEqual((sent['options'], sent['think'], sent['keep_alive']), ({'num_ctx': 8192}, False, '10m'))
+        self.assertEqual((sent['options'], sent['think'], sent['keep_alive']),
+                         ({'num_ctx': 8192, 'num_predict': 1024, 'temperature': 0}, False, '10m'))
+        for wrong in (0, -1, 'many', True, 2.5):
+            with self.assertRaises(ValueError, msg=wrong):
+                ollama_reduce.Plugin({'model': 'qwen-test', 'num_predict': wrong})
         records, outcome = self.run_reduce(parameters={'question': 'x', 'model': 'evil'})
         self.assertEqual((outcome['status'], outcome['code']), ('failed', 'invalid_call'))
         self.assertEqual(len(self.server.requests), 1)

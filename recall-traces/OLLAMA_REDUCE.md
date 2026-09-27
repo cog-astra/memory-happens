@@ -13,8 +13,11 @@ Model and endpoint come only from trusted configuration, never from passage text
  "options": {"model": "qwen3.8:27b-q8_0", "num_ctx": 32768, "think": false, "timeout": 900}}
 ```
 
-`model` is required. `endpoint` defaults to `http://127.0.0.1:11434`. `num_ctx`, `temperature`,
-`think` and `keep_alive` are passed to Ollama as given. `timeout` bounds the whole answer in seconds.
+`model` is required. `endpoint` defaults to `http://127.0.0.1:11434`. `num_ctx`, `num_predict`
+(a positive integer), `temperature`, `think` and `keep_alive` are passed to Ollama as given.
+`timeout` (seconds) bounds each wait for the server and is checked against the whole answer
+between streamed chunks, so one stalled read can outlast the overall deadline by up to one
+`timeout`; it is not a strict wall-clock ceiling.
 
 ## Use
 
@@ -56,8 +59,9 @@ only trace was a server-log warning. The beginning was dropped and the tail kept
 The plugin frames the passages with random BEGIN and END markers, and the reply schema makes
 the model echo both. If they do not match, the call fails with `input_not_seen` instead of
 returning an answer built from part of the input. This is a heuristic for the truncation
-observed above, not a coverage guarantee: echoed markers show that both ends reached the model,
-not that it attended to the middle, and a chat template could drop other parts. `prompt_eval_count` is reported but
+observed above, not a coverage guarantee: a matching pair means only that the reply echoed both
+markers that were sent. It says nothing about attention to the passages between them, and a chat
+template could drop other parts. `prompt_eval_count` is reported but
 does not prove coverage, because Ollama may reuse a cached prompt prefix. If the prompt does not
 fit, raise `num_ctx` or pass fewer passages.
 
