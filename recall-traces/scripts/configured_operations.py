@@ -52,12 +52,13 @@ class Configuration:
         return Runner(self.plugins, policy=lambda resources: all(not self.bounds.hides(path) for path in resources))
 
     def recipe(self, operation, parameters, limit=None):
-        steps = [{'name': alias, 'plugin': alias, 'operation': operation, 'parameters': parameters,
+        names = {alias: f'source_{index}' for index, alias in enumerate(self.entries)}
+        steps = [{'name': names[alias], 'plugin': alias, 'operation': operation, 'parameters': parameters,
                   'on_error': 'continue'} for alias in self.entries]
         steps.append({'name': 'combined', 'plugin': 'collect', 'operation': 'collect',
                       'parameters': {'order': 'relevance' if operation == 'search' else 'recent',
                                      'limit': limit, 'per_source': operation == 'search'},
-                      'inputs': {alias: alias for alias in self.entries}})
+                      'inputs': names})
         return steps
 
     def evidence(self, path):
