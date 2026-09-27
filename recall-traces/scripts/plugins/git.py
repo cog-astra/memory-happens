@@ -36,9 +36,9 @@ def repos(options, ttl=600):
     return sorted(set(FOUND[key][1]) | set(explicit))
 
 
-def commits(repo, since=None, words=()):
+def commits(repo, since=None, words=(), full=False):
     args = ['log', '--branches', '--name-only',
-            '--format=%x1e%h%x1f%aI%x1f%s%x1f%(trailers:key=Co-Authored-By,valueonly,separator=%x2C )']
+            f"--format=%x1e{'%H' if full else '%h'}%x1f%aI%x1f%s%x1f%(trailers:key=Co-Authored-By,valueonly,separator=%x2C )"]
     if since:
         args.append(f'--since={since.isoformat()}')
     if words:
