@@ -1,8 +1,10 @@
 import importlib
 import re
+import sys
 from pathlib import Path
 from typing import Annotated, Literal
 
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult
 from pydantic import Field
 
@@ -11,7 +13,7 @@ from operation_mcp import create_operation_server, reply
 from plugins.collect import Plugin as Collection
 from recall_bounds import Bounds
 from recall_core import load_config
-from recall_operations import Outcome, Value
+from recall_operations import Operation, Outcome, Value
 from recall_recipe import run
 from recall_runner import Runner
 
@@ -29,10 +31,46 @@ Independent source steps may set on_error="continue" to collect other sources wh
 Without that option failures stop the recipe; cancellation always stops. Only the last step is returned.'''
 
 
+REPORTED = set()
+
+
 class ConfiguredOperation(Value):
     name: str = Field(pattern=r'^[A-Za-z0-9_.-]{1,40}$')
     module: str = Field(min_length=1)
     options: dict = Field(default_factory=dict)
+
+
+def load(entry):
+    try:
+        module = importlib.import_module(entry.module)
+    except Exception as error:
+        return Unloaded(entry, error)
+    has_options = 'options' in entry.model_fields_set
+    if callable(getattr(module, 'Plugin', None)):
+        try:
+            plugin = module.Plugin(entry.options) if has_options else module.Plugin()
+        except Exception as error:
+            return Unloaded(entry, error)
+    elif not has_options:
+        plugin = module
+    else:
+        raise ValueError(f'{entry.module} needs a Plugin factory to accept options.')
+    if not all(callable(getattr(plugin, method, None)) for method in ('catalog', 'invoke')):
+        raise ValueError(f'{entry.module} must supply catalog and invoke.')
+    return plugin
+
+
+class Unloaded:
+    def __init__(self, entry, error):
+        self.reason = f'{entry.module}: {type(error).__name__}: {error}'[:300]
+        self.step = (f"Fix the module or options of the operations entry '{entry.name}', or remove the entry; "
+                     'configuration edits take effect when the server restarts.')
+
+    def catalog(self):
+        return [Operation('unavailable', f'Not loaded: {self.reason}. {self.step}')]
+
+    def invoke(self, operation, parameters, inputs, context):
+        yield Outcome(status='unavailable', code='operation_not_loaded', message=self.reason, next_steps=[self.step])
 
 
 class Configuration:
@@ -60,17 +98,11 @@ class Configuration:
         if len(set(names)) != len(names) or set(names) & self.plugins.keys():
             raise ValueError('Operation names must be unique and must not replace sources or built-ins.')
         for entry in operations:
-            module = importlib.import_module(entry.module)
-            has_options = 'options' in entry.model_fields_set
-            if callable(getattr(module, 'Plugin', None)):
-                plugin = module.Plugin(entry.options) if has_options else module.Plugin()
-            elif not has_options:
-                plugin = module
-            else:
-                raise ValueError(f'{entry.module} needs a Plugin factory to accept options.')
-            if not all(callable(getattr(plugin, method, None)) for method in ('catalog', 'invoke')):
-                raise ValueError(f'{entry.module} must supply catalog and invoke.')
-            self.plugins[entry.name] = plugin
+            plugin = self.plugins[entry.name] = load(entry)
+            notice = f"recall: operation '{entry.name}' not loaded: {plugin.reason}" if isinstance(plugin, Unloaded) else ''
+            if notice and notice not in REPORTED:
+                REPORTED.add(notice)
+                print(notice, file=sys.stderr)
 
     def runner(self):
         return Runner(self.plugins, policy=lambda resources: all(not self.bounds.hides(path) for path in resources))
@@ -105,7 +137,11 @@ def create_server(config_path, reader=None, selector='plugins.select_literal'):
     cfg = load_config(config_path)
 
     def configured():
-        return Configuration(cfg, reader, selector)
+        try:
+            return Configuration(cfg, reader, selector)
+        except ValueError as error:
+            raise ToolError(f'Invalid source configuration: {error}'[:1000]
+                            + ' Fix the configuration file and restart the server.') from error
 
     def runner():
         return configured().runner()
