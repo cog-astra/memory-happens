@@ -120,7 +120,9 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
             git(second, 'init', '-q')
             commit(second, 'notes.txt', 'A second repository.\n', 'Distinct second repository decision')
             revision = subprocess.check_output(['git', '-C', str(second), 'rev-parse', 'HEAD'], text=True).strip()
+            cfg['sources'].insert(0, {'plugin': 'notes', 'name': 'broad_notes', 'roots': [str(base)]})
             cfg['sources'].append({'plugin': 'git', 'name': 'second_git', 'repos': [str(second)]})
+            (notes / 'plain.txt').write_text('A text file outside the notes pattern.\n', encoding='utf-8')
             path.write_text(json.dumps(cfg), encoding='utf-8')
             async with server('--sources', str(path)) as session:
                 detail = await self.call(session, 'read', path=f'read: {notes / "cache.md"} start=2', lines=1, characters=10000)
@@ -128,6 +130,9 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 found = await self.call(session, 'read', path=f'read: {second}@{revision}', characters=10000)
                 self.assertIn('Distinct second repository decision', found['records'][0]['text'])
                 self.assertEqual(found['records'][0]['evidence'][0]['source'], 'second_git')
+                fallback = await self.call(session, 'read', path=str(notes / 'plain.txt'), characters=10000)
+                self.assertEqual(fallback['records'][0]['text'], 'A text file outside the notes pattern.\n')
+                self.assertEqual(fallback['records'][0]['evidence'][0]['source'], 'folder')
 
 
 if __name__ == '__main__':

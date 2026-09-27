@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from mcp.types import CallToolResult
 from pydantic import Field
 
+import recall_archive
 from operation_mcp import create_operation_server, reply
 from plugins.collect import Plugin as Collection
 from recall_bounds import Bounds
@@ -30,9 +31,10 @@ Without that option failures stop the recipe; cancellation always stops. Only th
 
 class Configuration:
     def __init__(self, cfg, reader=None, selector='plugins.select_literal'):
-        from source_operations import FolderPlugin, Plugin
+        from source_operations import FolderPlugin, Places, Plugin
 
         self.bounds = Bounds(cfg.get('spaces', []), reader)
+        places = Places(self.bounds, cfg.get('sources', []))
         self.entries, self.plugins = {}, {}
         for entry in cfg.get('sources', []):
             stem = Path(entry['plugin']).stem
@@ -42,17 +44,14 @@ class Configuration:
             if not re.fullmatch(r'[A-Za-z0-9_.-]{1,40}', alias) or alias in self.plugins or alias in ('folder', 'selector', 'collect'):
                 raise ValueError(f'Invalid or duplicate source name: {alias}')
             self.entries[alias] = entry
-            self.plugins[alias] = Plugin(alias, entry, self.bounds)
-        self.plugins['folder'] = FolderPlugin('folder', self.bounds)
+            self.plugins[alias] = Plugin(alias, entry, places)
+        self.plugins['folder'] = FolderPlugin('folder', places)
         module = importlib.import_module(selector)
         self.plugins['selector'] = module if callable(getattr(module, 'catalog', None)) else module.Plugin()
         self.plugins['collect'] = Collection(self.entries)
 
     def runner(self):
-        roots = {root.resolve() for alias in self.entries
-                 if self.plugins[alias].source is not None for root in self.plugins[alias].source.roots()}
-        return Runner(self.plugins, policy=lambda resources: all(
-            Path(path).resolve() in roots or not self.bounds.hides(path) for path in resources))
+        return Runner(self.plugins, policy=lambda resources: all(not self.bounds.hides(path) for path in resources))
 
     def recipe(self, operation, parameters, limit=None):
         names = {alias: f'source_{index}' for index, alias in enumerate(self.entries)}
@@ -67,12 +66,15 @@ class Configuration:
     def evidence(self, path):
         locator = path.removeprefix('read: ')
         target = locator.split(' start=')[0]
-        for alias, entry in self.entries.items():
-            if entry['plugin'] == 'git' and re.match(r'^.+@[0-9a-fA-F]{6,40}$', target):
-                if self.plugins[alias].source.repository(target)[0] is not None:
+        if re.match(r'^.+@[0-9a-fA-F]{6,40}$', target):
+            for alias, entry in self.entries.items():
+                if entry['plugin'] == 'git' and self.plugins[alias].source.repository(target)[0] is not None:
                     return {'source': alias, 'locator': locator}
-            roots = entry.get('roots', []) + [store['corpus'] for store in entry.get('stores', [])]
-            if any(Path(target).resolve().is_relative_to(Path(root).resolve()) for root in roots):
+        path = Path(target)
+        resolved = recall_archive.resolve(path)
+        for alias, entry in self.entries.items():
+            source = self.plugins[alias].source
+            if entry['plugin'] != 'git' and source is not None and source.owns(path, resolved):
                 return {'source': alias, 'locator': locator}
         return {'source': 'folder', 'locator': locator}
 
