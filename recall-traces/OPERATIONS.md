@@ -84,11 +84,12 @@ The operation runner accepts its own explicit policy callback. No policy file fo
 Its access boundary is the whole selected repository. It remains experimental: a patch larger
 than the caller's budget can be read only whole.
 `--selector trigram_selector` replaces the default selector in either mode.
-Without either mode flag, the existing `recent`, `search` and `read` tools remain available.
+`--sources /absolute/path/to/sources.json` connects configured sources through operations,
+as described below. With no mode flag, the legacy `recent`, `search` and `read` tools remain available.
 See [first connection](../BOOTSTRAP.md) for client setup.
 
 `operation_run(steps, characters, view, trace)` runs a finite recipe of catalog operations in one
-call with a fresh runner. A step is `{name, plugin, operation, parameters?, inputs?}`; an input
+call with a fresh runner. A step is `{name, plugin, operation, parameters?, inputs?, on_error?}`; an input
 port holds the name of an earlier step or a list of complete records. Records move between steps
 inside the call, so the caller does not carry intermediate batches. Policy, evidence, lineage and
 outcomes apply to every step as they do to a single invocation. A step that ends neither in
@@ -97,6 +98,11 @@ recipe takes the first `partial` step's outcome, or else the last step's, with i
 and continuation. Every step that ran is summarized: operation, parameters, record count, its
 complete outcome, and a month-by-month breakdown of `context.event_time` that keeps gaps between
 periods visible.
+
+An independent source step may set `on_error: "continue"`: failed records from that step are
+discarded, subsequent steps run, and the recipe reports partial coverage with
+`incomplete_sources`. The default is `"stop"`. Cancellation always stops the recipe, including
+when closing the plugin iterator also fails. Caller-supplied recipes allow at most ten steps.
 
 Only the last step's records are returned, projected by `view`: `first_look` (default) gives
 headline, event time and evidence; `passages` gives text, evidence and context; `records` gives
@@ -122,3 +128,34 @@ The stdio integration tests exercise both selectors, a first look followed by a 
 the character budget and distinct outcomes over a synthetic history with separated periods,
 overlapping paths and a large patch (`synthetic_history.py`). They do not establish the quality
 of a language model's interpretation.
+
+## Configured sources through operations
+
+`--sources` uses the existing source configuration for Claude and Codex session archives,
+project memory, notes and discovered Git repositories. It exposes `operation_catalog` and
+`operation_run` alongside `recent`, `search` and `read` convenience recipes. These recipes use
+the same source operations and collection plugin; they do not invoke the legacy `Recall` core.
+Each source may have a unique `name` for its catalog alias. Otherwise its plugin name is used,
+with a suffix for repeated source types. Unknown source types report `unsupported`.
+
+Every convenience call requires `characters`. `recent` accepts `days`, `where`, `limit` and
+`view`; `search` adds `query` and optional `root`. Without `root`, source search results are
+ranked by matched words, occurrences and time, with `limit` applied per source. With `root`,
+the folder reader searches text files and relocated archives. Empty results are distinct
+from missing sources or incomplete coverage. Session archive warnings are retained in outcomes.
+The internal source-collection recipe can include more than ten configured sources.
+
+Use a finding's `evidence` in `read`, or pass a legacy `read: path start=N` address as `path`.
+These alternatives are mutually exclusive. `start` overrides the address's line offset;
+`lines` defaults to 80. Read outcomes carry continuation and identify a changed file when
+its observed modification time differs. Evidence can be read by a fresh server using the same
+source configuration. Git evidence identifies a repository and revision; the configured Git
+adapter reads commit messages and change statistics, matching the legacy source rather than
+the full-patch reader used by `--repo`.
+
+Session and commit times use `event_time`; file modification times use `modified_at`.
+Session recent results retain daily topics and archive metadata in passage context. Transform
+plugins can combine the sources without interpreting their evidence. Configuration is loaded
+when the server starts; boundary files are reloaded for each convenience or custom recipe call.
+This mode does not install or schedule archive writers, update another MCP registration, or
+replace the separately running legacy server.
