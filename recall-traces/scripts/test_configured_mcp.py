@@ -87,7 +87,7 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(found['outcome']['status'], 'partial')
                 self.assertTrue(found['records'])
                 steps = [{'name': 'notes', 'plugin': 'notes', 'operation': 'search', 'parameters': {'query': 'cache'}},
-                         {'name': 'sessions', 'plugin': 'sessions', 'operation': 'search', 'parameters': {'query': 'cache'}},
+                         {'name': 'sessions', 'plugin': 'sessions', 'operation': 'search', 'parameters': {'query': 'cache revision'}},
                          {'name': 'merge', 'plugin': 'collect', 'operation': 'collect',
                           'inputs': {'notes': 'notes', 'sessions': 'sessions', 'memory': [], 'git': [], 'missing': []}},
                          {'name': 'select', 'plugin': 'selector', 'operation': 'select',
@@ -97,6 +97,18 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 oversized = await self.call(session, 'search', query='cache', characters=1)
                 self.assertEqual(oversized['outcome']['code'], 'over_budget')
                 self.assertNotIn('records', oversized)
+
+    async def test_built_in_search_covers_ten_configured_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            (base / 'note.md').write_text('A cache lesson.\n', encoding='utf-8')
+            cfg = {'sources': [{'plugin': 'notes', 'name': f'notes_{i}', 'roots': [str(base)]} for i in range(10)]}
+            path = base / 'sources.json'
+            path.write_text(json.dumps(cfg), encoding='utf-8')
+            async with server('--sources', str(path)) as session:
+                result = await self.call(session, 'search', query='cache', characters=30000)
+                self.assertEqual(result['outcome']['status'], 'success')
+                self.assertEqual({r['evidence'][0]['source'] for r in result['records']}, {f'notes_{i}' for i in range(10)})
 
 
 if __name__ == '__main__':
