@@ -264,6 +264,18 @@ class SourceOperationsTest(unittest.TestCase):
         records, outcome = self.run_op(runner, 'git', 'search', {'query': 'lighthouse'})
         self.assertEqual({r['evidence'][0]['revision'] for r in records}, {self.painted, self.opened})
         self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
+        fresh = Runner(plugins, policy=lambda resources: not any(self.bounds.hides(r) for r in resources))
+        for record in records:
+            carried = json.loads(json.dumps(record['evidence'][0]))
+            read, outcome = self.run_op(fresh, 'git', 'read', {'evidence': carried})
+            self.assertEqual(outcome['status'], 'success', carried['revision'])
+            self.assertIn(carried['revision'], read[0]['text'])
+        for revision in (self.private, self.mixed):
+            forged = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
+            self.assertEqual(self.run_op(fresh, 'git', 'read', {'evidence': forged})[1]['code'], 'access_denied')
+        notes = [r for r in self.run_op(runner, 'notes', 'search', {'query': 'lighthouse'})[0]]
+        for record in notes:
+            self.assertEqual(self.run_op(fresh, 'notes', 'read', {'evidence': record['evidence'][0]})[1]['status'], 'success')
 
     def test_another_reader_cannot_open_what_a_source_owner_closes(self):
         runner = self.runner()
