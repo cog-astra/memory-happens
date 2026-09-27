@@ -19,8 +19,9 @@ Our [vision and design principles](VISION.md) explain why we build recall from t
 how we treat evidence and attention, and what would count as useful memory.
 The [FAQ](FAQ.md) explores plugins, recall workflows, model-assisted understanding
 and the limits of what a trace can tell us.
-The [proposed operation contract](ARCHITECTURE.md) describes the next architecture slice
-and its acceptance checks; it is not the API of the imported implementation.
+The [operation design](ARCHITECTURE.md) records the proposal and its acceptance checks.
+The [implemented operations](recall-traces/OPERATIONS.md) document the experimental API,
+configured sources and optional model-assisted processing.
 
 ## Work together
 
@@ -36,13 +37,26 @@ session archivers and their tests. It was imported from a working installation; 
 records the source revision. Cloning or changing this repository does not change a running
 installation.
 
-Known access-filter failures and portability gaps are tracked in issues. The current
+Known limitations are tracked in issues. The current
 `humans.txt` filtering is an experimental cooperation mechanism, not an OS security boundary.
 Python plugins run trusted code in the server process.
 
 ## Install and test
 
-Tested with Python 3.12 on Windows; other versions and platforms are untested.
+For the guided first connection, use [BOOTSTRAP.md](BOOTSTRAP.md). For your own sources,
+the [configured-source mode](recall-traces/OPERATIONS.md#configured-sources-through-operations)
+uses `recall_mcp.py --sources /absolute/path/to/sources.json` and exposes the composable
+operations alongside `recent`, `search` and `read`. Register that command with your MCP
+client; running a stdio server in a terminal does not connect it to the client.
+
+The commands below start the legacy MCP mode, which remains available for existing setups.
+Its filtering still has known mixed-commit and junction-alias gaps
+([issue #38](https://github.com/cog-astra/memory-happens/issues/38)); do not rely on that mode
+to separate closed spaces from their guests. Use the configured-source mode for new setups.
+
+Validated in an isolated Python 3.12 environment on Windows; other versions and platforms
+are untested. Embedded Python builds that ignore `PYTHONPATH` have a known test limitation
+([issue #33](https://github.com/cog-astra/memory-happens/issues/33)).
 
 ```sh
 cd recall-traces/scripts
