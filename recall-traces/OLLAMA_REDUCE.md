@@ -52,9 +52,10 @@ judges whether the interpretation is true.
 
 ## Silent prompt truncation
 
-Ollama cuts a prompt longer than its context without an error. Measured with 0.34.4: a
-6453-token prompt at `num_ctx=256` returned HTTP 200 with `prompt_eval_count=131`, and the
-only trace was a server-log warning. The beginning was dropped and the tail kept.
+Ollama cuts a prompt longer than its context without an error. Measured with 0.34.4 at
+`num_ctx=256`: the server log counted the prompt as 6453 tokens, the reply was HTTP 200 with
+`prompt_eval_count=131`, and that log warning was the only trace. The beginning was dropped and
+the tail kept.
 
 The plugin frames the passages with random BEGIN and END markers, and the reply schema makes
 the model echo both. `context.markers` records each as `echoed` or `differs`. BEGIN is recorded as
@@ -62,16 +63,19 @@ the model echo both. `context.markers` records each as `echoed` or `differs`. BE
 above looked like. On any mismatch the answer and its cited evidence are still returned, with
 `partial/marker_mismatch`. The message says what differed and that coverage of the input is unknown.
 
-A mismatch does not prove truncation either. In one live run a 257-token prompt, far inside its
-16384-token context, came back with BEGIN exact and END miscopied by one character. Malformed
+A mismatch does not prove truncation either. In one live run the reply returned
+`prompt_eval_count=257` at `num_ctx=16384`, echoed BEGIN exactly and miscopied END by one
+character. Malformed
 answers, invalid citations, server errors and truncated output remain failures and return no
 answer.
 
 The markers are a heuristic for the truncation observed above, not a coverage guarantee: a
 matching pair means only that the reply echoed both markers that were sent. It says nothing
 about attention to the passages between them, and a chat template could drop other parts.
-`prompt_eval_count` is reported but does not prove coverage, because Ollama may reuse a cached
-prompt prefix. If the prompt may not fit, raise `num_ctx` or pass fewer passages.
+`prompt_eval_count` is reported, but it is the count the backend returned, not an independently
+measured length of the original prompt: in the truncation measurement above it came back as the
+reduced 131. On its own it cannot show that nothing was cut. If the prompt may not fit, raise
+`num_ctx` or pass fewer passages.
 
 Passages are presented to the model as data, and it is told to ignore instructions inside them.
 That is an instruction, not a sandbox: treat the answer as a claim to verify against its evidence.
