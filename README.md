@@ -50,6 +50,9 @@ operations alongside `recent`, `search` and `read`. Register that command with y
 client; running a stdio server in a terminal does not connect it to the client.
 
 The commands below start the legacy MCP mode, which remains available for existing setups.
+Its filtering still has known mixed-commit and junction-alias gaps
+([issue #38](https://github.com/cog-astra/memory-happens/issues/38)); do not rely on that mode
+to separate closed spaces from their guests. Use the configured-source mode for new setups.
 
 Tested with Python 3.12 on Windows; other versions and platforms are untested.
 
