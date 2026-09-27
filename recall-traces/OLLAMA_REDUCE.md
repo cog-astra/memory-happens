@@ -55,8 +55,9 @@ only trace was a server-log warning. The beginning was dropped and the tail kept
 
 The plugin frames the passages with random BEGIN and END markers, and the reply schema makes
 the model echo both. If they do not match, the call fails with `input_not_seen` instead of
-returning an answer built from part of the input. Echoed markers show that both ends reached
-the model; they do not show that the middle was understood. `prompt_eval_count` is reported but
+returning an answer built from part of the input. This is a heuristic for the truncation
+observed above, not a coverage guarantee: echoed markers show that both ends reached the model,
+not that it attended to the middle, and a chat template could drop other parts. `prompt_eval_count` is reported but
 does not prove coverage, because Ollama may reuse a cached prompt prefix. If the prompt does not
 fit, raise `num_ctx` or pass fewer passages.
 
