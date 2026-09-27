@@ -16,6 +16,9 @@ its source. This is an invitation, not an extra task.
 
 ## The recall tools (MCP)
 
+The descriptions below cover the legacy MCP mode. For the `--sources` mode, its presets
+and composable operations, see [OPERATIONS.md](OPERATIONS.md#configured-sources-through-operations).
+
 `recent` is a ribbon by day: Claude and Codex sessions split into days of activity (first and
 last human turn, last reply, topics if written), commits of the repositories found, changed
 project memory and notes. `search` looks for words across all these sources at once; findings
@@ -23,7 +26,7 @@ where more distinct words matched come first. With `root` it searches one folder
 archived process folders. `read` opens a place by the address from a `read:` line or
 `repository@revision`.
 
-Sources are plugins listed in `scripts/sources.json` (or the file named by `RECALL_CONFIG`):
+Legacy sources are plugins listed in `scripts/sources.json` (or the file named by `RECALL_CONFIG`):
 `sessions` (transcript corpora), `memory` (Claude project memory), `notes` (Markdown folders),
 `git` (discovered and explicitly listed repositories). A plugin is a `Plugin(Source)` class from
 `recall_core.py`, placed in `scripts/plugins/` or given as a path to any `.py`; it yields findings
