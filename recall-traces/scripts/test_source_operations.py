@@ -129,8 +129,9 @@ class SourceOperationsTest(unittest.TestCase):
 
     def runner(self, **replaced):
         options = {**self.options, **replaced}
-        plugins = {alias: source_operations.Plugin(alias, entry, self.bounds) for alias, entry in options.items()}
-        plugins['folder'] = source_operations.FolderPlugin('folder', self.bounds)
+        places = source_operations.Places(self.bounds, list(options.values()))
+        plugins = {alias: source_operations.Plugin(alias, entry, places) for alias, entry in options.items()}
+        plugins['folder'] = source_operations.FolderPlugin('folder', places)
         plugins['select'] = select_literal.Plugin()
         return Runner(plugins)
 
@@ -253,7 +254,8 @@ class SourceOperationsTest(unittest.TestCase):
         (self.friend / 'closed' / 'n.md').write_text('a closed lighthouse note\n', encoding='utf-8')
         options = {'notes': {'plugin': 'notes', 'roots': [str(self.base / 'vault'), str(self.friend)]},
                    'git': {'plugin': 'git', 'repos': [str(self.work), str(self.friend)]}}
-        plugins = {alias: source_operations.Plugin(alias, entry, self.bounds) for alias, entry in options.items()}
+        places = source_operations.Places(self.bounds, list(options.values()))
+        plugins = {alias: source_operations.Plugin(alias, entry, places) for alias, entry in options.items()}
         runner = Runner(plugins, policy=lambda resources: not any(self.bounds.hides(r) for r in resources))
         records, outcome = self.run_op(runner, 'notes', 'search', {'query': 'lighthouse'})
         self.assertEqual({r['evidence'][0]['locator'].split(' start=')[0] for r in records},
@@ -263,8 +265,28 @@ class SourceOperationsTest(unittest.TestCase):
         self.assertEqual({r['evidence'][0]['revision'] for r in records}, {self.painted, self.opened})
         self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
 
+    def test_another_reader_cannot_open_what_a_source_owner_closes(self):
+        runner = self.runner()
+        for evidence in ({'source': 'folder', 'locator': f'{self.secret} start=1'},
+                         {'source': 'folder', 'locator': f'{self.memory_secret} start=1'}):
+            self.assertEqual(self.run_op(runner, 'folder', 'read', {'evidence': evidence})[1]['code'], 'access_denied')
+        records, outcome = self.run_op(runner, 'folder', 'search', {'query': 'lighthouse', 'root': str(self.corpus)})
+        places = {r['evidence'][0]['locator'].split(' start=')[0] for r in records}
+        self.assertNotIn(str(self.secret), places)
+        self.assertIn(str(self.shared), places)
+        self.assertEqual(outcome['code'], 'policy_filtered')
+        neighbour = {'source': 'folder', 'locator': f'{self.shared} start=1'}
+        self.assertEqual(self.run_op(runner, 'folder', 'read', {'evidence': neighbour})[1]['status'], 'success')
+        overlapping = self.runner(notes={'plugin': 'notes', 'roots': [str(self.corpus)]})
+        records = self.run_op(overlapping, 'notes', 'search', {'query': 'lighthouse'})[0]
+        places = {r['evidence'][0]['locator'].split(' start=')[0] for r in records}
+        self.assertEqual((str(self.secret) in places, str(self.shared) in places), (False, True))
+        forged = {'source': 'notes', 'locator': f'{self.secret} start=1'}
+        self.assertEqual(self.run_op(overlapping, 'notes', 'read', {'evidence': forged})[1]['code'], 'access_denied')
+
     def test_a_denying_policy_refuses_the_whole_source(self):
-        plugins = {'notes': source_operations.Plugin('notes', self.options['notes'], self.bounds)}
+        places = source_operations.Places(self.bounds, [self.options['notes']])
+        plugins = {'notes': source_operations.Plugin('notes', self.options['notes'], places)}
         outcome = self.run_op(Runner(plugins, policy=lambda resources: False), 'notes', 'search', {'query': 'lighthouse'})[1]
         self.assertEqual((outcome['status'], outcome['code']), ('failed', 'access_denied'))
 
