@@ -63,7 +63,7 @@ class Plugin:
         text = prompt(parameters['question'], records, begin, end)
         try:
             reply, final = self.chat(text, context)
-            answer, cited = self.parse(reply, begin, end, len(records))
+            answer, cited, markers = self.parse(reply, begin, end, len(records))
         except Failure as failure:
             yield failure.outcome
             return
@@ -75,9 +75,10 @@ class Plugin:
         yield Passage(text=answer, evidence=evidence, context={
             'relation': 'transformed', 'model': self.model, 'question': parameters['question'],
             'inputs': len(records), 'input_characters': sum(len(record.text) for record in records),
-            'cited': cited, 'prompt_tokens': final.get('prompt_eval_count'), 'output_tokens': final.get('eval_count'),
+            'cited': cited, 'markers': markers,
+            'prompt_tokens': final.get('prompt_eval_count'), 'output_tokens': final.get('eval_count'),
             **({'num_ctx': self.options['num_ctx']} if 'num_ctx' in self.options else {})})
-        yield Outcome(status='success')
+        yield mismatch(markers) if set(markers.values()) != {'echoed'} else Outcome(status='success')
 
     def chat(self, text, context):
         body = {'model': self.model, 'stream': True, 'format': SCHEMA, **self.extra,
@@ -134,10 +135,21 @@ class Plugin:
             answer, cited, seen = data['answer'], data['cited'], (data['begin'], data['end'])
         except (json.JSONDecodeError, KeyError, TypeError):
             raise Failure('failed', 'invalid_model_output', reply[:300])
-        if seen != (begin, end):
-            raise Failure('failed', 'input_not_seen', 'The model did not return both markers; the backend may have '
-                          'cut the prompt to its context size.', ['Raise num_ctx or pass fewer passages.'])
         if not isinstance(answer, str) or not isinstance(cited, list) or not all(
                 isinstance(number, int) and not isinstance(number, bool) and 1 <= number <= count for number in cited):
             raise Failure('failed', 'invalid_citations', f'cited: {cited!r}'[:300])
-        return answer, list(dict.fromkeys(cited))
+        markers = {'begin': 'echoed' if seen[0] == begin else 'end_marker' if seen[0] == end else 'differs',
+                   'end': 'echoed' if seen[1] == end else 'differs'}
+        return answer, list(dict.fromkeys(cited)), markers
+
+
+def mismatch(markers):
+    if markers['begin'] == 'end_marker':
+        cause = ('The reply returned the END marker in place of BEGIN, as when the backend cut the start of the '
+                 'prompt; the answer may rest on the end of the input only.')
+    else:
+        cause = (f"The reply did not echo the sent markers exactly (begin {markers['begin']}, end {markers['end']}); "
+                 'the model may have miscopied them or may not have received the whole prompt.')
+    return Outcome(status='partial', code='marker_mismatch', message=cause + ' Coverage of the input is unknown.',
+                   next_steps=['Read the cited evidence before relying on the answer.',
+                               'If the prompt may exceed num_ctx, raise num_ctx or pass fewer passages.'])

@@ -46,7 +46,7 @@ judges whether the interpretation is true.
 | `unavailable` / `model_server_unavailable`, `model_missing` | Nothing answered, or the model is not pulled. |
 | `failed` / `model_timeout` | No complete answer within `timeout`. |
 | `failed` / `model_output_truncated` | The answer hit the output limit. |
-| `failed` / `input_not_seen` | The model did not echo both prompt markers; see below. |
+| `partial` / `marker_mismatch` | An answer with its cited evidence, but the reply did not echo both prompt markers; coverage unknown, see below. |
 | `failed` / `invalid_model_output`, `invalid_citations`, `invalid_model_stream`, `incomplete_model_stream`, `model_error` | The reply cannot be trusted as an answer. |
 | `cancelled` | Stopped between streamed chunks. |
 
@@ -57,13 +57,21 @@ Ollama cuts a prompt longer than its context without an error. Measured with 0.3
 only trace was a server-log warning. The beginning was dropped and the tail kept.
 
 The plugin frames the passages with random BEGIN and END markers, and the reply schema makes
-the model echo both. If they do not match, the call fails with `input_not_seen` instead of
-returning an answer built from part of the input. This is a heuristic for the truncation
-observed above, not a coverage guarantee: a matching pair means only that the reply echoed both
-markers that were sent. It says nothing about attention to the passages between them, and a chat
-template could drop other parts. `prompt_eval_count` is reported but
-does not prove coverage, because Ollama may reuse a cached prompt prefix. If the prompt does not
-fit, raise `num_ctx` or pass fewer passages.
+the model echo both. `context.markers` records each as `echoed` or `differs`. BEGIN is recorded as
+`end_marker` when the reply returned the END marker in its place, which is what the truncation
+above looked like. On any mismatch the answer and its cited evidence are still returned, with
+`partial/marker_mismatch`. The message says what differed and that coverage of the input is unknown.
+
+A mismatch does not prove truncation either. In one live run a 257-token prompt, far inside its
+16384-token context, came back with BEGIN exact and END miscopied by one character. Malformed
+answers, invalid citations, server errors and truncated output remain failures and return no
+answer.
+
+The markers are a heuristic for the truncation observed above, not a coverage guarantee: a
+matching pair means only that the reply echoed both markers that were sent. It says nothing
+about attention to the passages between them, and a chat template could drop other parts.
+`prompt_eval_count` is reported but does not prove coverage, because Ollama may reuse a cached
+prompt prefix. If the prompt may not fit, raise `num_ctx` or pass fewer passages.
 
 Passages are presented to the model as data, and it is told to ignore instructions inside them.
 That is an instruction, not a sandbox: treat the answer as a claim to verify against its evidence.

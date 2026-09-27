@@ -43,7 +43,8 @@ class Stub(BaseHTTPRequestHandler):
             return
         text = body['messages'][-1]['content']
         begin, end = re.search(r'BEGIN MARKER: (\w+)', text)[1], re.search(r'END MARKER: (\w+)', text)[1]
-        reply = {'begin': end if mode == 'lost_begin' else begin, 'end': end,
+        miscopied = end[:2] + ('e' if end[2] != 'e' else 'f') + end[3:]
+        reply = {'begin': end if mode == 'lost_begin' else begin, 'end': miscopied if mode == 'miscopy_end' else end,
                  'answer': 'The lighthouse was painted blue.', 'cited': self.server.cited}
         content = 'not json' if mode == 'bad_json' else json.dumps(reply)
         self.send_response(200)
@@ -94,6 +95,7 @@ class OllamaReduceTest(unittest.TestCase):
                                                   INPUTS[0]['evidence'][0] | {'revision': None}])
         context = records[0]['context']
         self.assertEqual((context['relation'], context['cited'], context['inputs']), ('transformed', [2, 1], 3))
+        self.assertEqual(context['markers'], {'begin': 'echoed', 'end': 'echoed'})
         self.assertEqual(context['input_characters'], sum(len(item['text']) for item in INPUTS))
         self.assertEqual((context['prompt_tokens'], context['output_tokens']), (321, 45))
         self.assertEqual(json.dumps(INPUTS, sort_keys=True), before)
@@ -101,6 +103,24 @@ class OllamaReduceTest(unittest.TestCase):
         self.assertEqual(sent['model'], 'qwen-test')
         self.assertTrue(all(item['text'] in sent['messages'][-1]['content'] for item in INPUTS))
         self.assertEqual(sent['format']['required'], ['begin', 'end', 'answer', 'cited'])
+
+    def test_a_marker_mismatch_keeps_the_answer_but_not_the_claim_of_coverage(self):
+        matched, _ = self.run_reduce()
+        self.server.mode = 'miscopy_end'
+        records, outcome = self.run_reduce()
+        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'marker_mismatch'))
+        self.assertIn('miscopied', outcome['message'])
+        self.assertIn('unknown', outcome['message'])
+        self.assertEqual((records[0]['text'], records[0]['evidence']), (matched[0]['text'], matched[0]['evidence']))
+        self.assertEqual(records[0]['context']['markers'], {'begin': 'echoed', 'end': 'differs'})
+        self.server.mode = 'lost_begin'
+        records, outcome = self.run_reduce()
+        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'marker_mismatch'))
+        self.assertIn('cut the start', outcome['message'])
+        self.assertEqual(records[0]['context']['markers'], {'begin': 'end_marker', 'end': 'echoed'})
+        self.server.mode, self.server.cited = 'miscopy_end', [9]
+        records, outcome = self.run_reduce()
+        self.assertEqual((records, outcome['code']), ([], 'invalid_citations'))
 
     def test_empty_input_does_not_call_the_model(self):
         records, outcome = self.run_reduce(inputs=[])
@@ -113,7 +133,6 @@ class OllamaReduceTest(unittest.TestCase):
         dead = f'http://127.0.0.1:{closed.getsockname()[1]}'
         closed.close()
         cases = [({'mode': 'bad_json'}, {}, ('failed', 'invalid_model_output')),
-                 ({'mode': 'lost_begin'}, {}, ('failed', 'input_not_seen')),
                  ({'cited': [4]}, {}, ('failed', 'invalid_citations')),
                  ({'cited': [0]}, {}, ('failed', 'invalid_citations')),
                  ({'cited': [True]}, {}, ('failed', 'invalid_citations')),
