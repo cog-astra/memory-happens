@@ -129,6 +129,7 @@ class Coverage:
         self.present, self.missing = present, missing
         self.warnings, self.recovery = list(warnings), list(recovery)
         self.hidden = 0
+        self.outside_where = 0
 
     def outcome(self, kind):
         if not self.present:
@@ -142,10 +143,13 @@ class Coverage:
             reasons.append(('stale_archive', '; '.join(self.warnings)))
         if self.hidden:
             reasons.append(('policy_filtered', f'{self.hidden} excluded by the configured access policy'))
-        if not reasons:
-            return Outcome(status='success')
-        return Outcome(status='partial', code=reasons[0][0], message='; '.join(text for _, text in reasons) + '.',
-                       next_steps=self.recovery if self.missing or self.warnings else [])
+        outcome = (Outcome(status='partial', code=reasons[0][0], message='; '.join(text for _, text in reasons) + '.',
+                           next_steps=self.recovery if self.missing or self.warnings else [])
+                   if reasons else Outcome(status='success'))
+        if self.outside_where:
+            outcome.message = f'{outcome.message} Matching records outside where: {self.outside_where}.'.strip()
+            outcome.next_steps.append('Search this source without where for a broader scope.')
+        return outcome
 
 
 class Sessions:
@@ -372,14 +376,22 @@ class Plugin:
         closed = [root.resolve() for root in coverage.present if hides_path(self.bounds, root)]
         context.require(*sorted({root.resolve().as_posix() for root in coverage.present if root.resolve() not in closed}))
 
-        def admit(bound, path):
+        def resources_for(bound, path):
             if self.places.hidden(bound, path):
-                coverage.hidden += 1
-                return False
+                return None
             place = Path(bound['repo']) if 'files' in bound else path
             if place is not None and any(within(place, root) for root in closed):
-                context.require(*([Path(name).resolve().as_posix() for name in bound['files']] if 'files' in bound
-                                  else [Path(path).resolve().as_posix()]))
+                return ([Path(name).resolve().as_posix() for name in bound['files']] if 'files' in bound
+                        else [Path(path).resolve().as_posix()])
+            return []
+
+        def admit(bound, path):
+            resources = resources_for(bound, path)
+            if resources is None:
+                coverage.hidden += 1
+                return False
+            if resources:
+                context.require(*resources)
             return True
 
         if operation == 'passages':
@@ -419,7 +431,12 @@ class Plugin:
             since = since_of(parameters['days'])
             hits = []
             for hit, path, extra in self.source.search(words, since):
-                if (since and hit['time'] < since) or not mentions(hit['where'], parameters['where']):
+                if since and hit['time'] < since:
+                    continue
+                if not mentions(hit['where'], parameters['where']):
+                    resources = resources_for(hit['bound'], path)
+                    if resources is not None and context.policy(tuple(sorted(context.resources.union(resources)))):
+                        coverage.outside_where += 1
                     continue
                 if not admit(hit['bound'], path):
                     continue
@@ -554,6 +571,9 @@ class FolderPlugin:
         coverage, hits = Coverage(roots, []), []
         for hit in folder.search(words, since):
             if not mentions(hit['where'], parameters['where']):
+                path = Path(hit['locator'].split(' start=')[0])
+                if not self.places.hidden(hit['bound'], path):
+                    coverage.outside_where += 1
                 continue
             path = Path(hit['locator'].split(' start=')[0])
             if self.places.hidden(hit['bound'], path):
