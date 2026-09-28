@@ -10,6 +10,28 @@ from test_operation_mcp import server
 
 
 class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
+    def test_operations_container_requires_a_list(self):
+        for value in ({}, '', None, False, 0, 1, 'trigram_selector', {'name': 'fuzzy'}):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'operations must be a list'):
+                Configuration({'operations': value})
+        for cfg in ({}, {'operations': []}):
+            with self.subTest(cfg=cfg):
+                self.assertEqual(set(Configuration(cfg).plugins), {'folder', 'selector', 'collect'})
+
+    async def test_invalid_operations_container_explains_repair_over_mcp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'sources.json'
+            for value in ({}, None):
+                path.write_text(json.dumps({'operations': value}), encoding='utf-8')
+                with self.subTest(value=value):
+                    async with server('--sources', str(path)) as session:
+                        for tool, arguments in [('operation_catalog', {}),
+                                                ('search', {'query': 'cache', 'characters': 1000})]:
+                            reply = await session.call_tool(tool, arguments)
+                            self.assertTrue(reply.is_error, reply)
+                            self.assertIn('operations must be a list', reply.content[0].text)
+                            self.assertIn('restart the server', reply.content[0].text)
+
     async def test_configured_transform_runs_after_different_sources_with_options(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
