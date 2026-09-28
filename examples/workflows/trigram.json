@@ -1,0 +1,8 @@
+{
+  "steps": [
+    {"name": "source", "plugin": "notes", "operation": "passages", "parameters": {"lines": 40}},
+    {"name": "matches", "plugin": "fuzzy", "operation": "select", "parameters": {"query": "gardens", "limit": 5}, "inputs": {"passages": "source"}}
+  ],
+  "characters": 6000,
+  "view": "passages"
+}
