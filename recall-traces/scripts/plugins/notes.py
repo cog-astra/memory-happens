@@ -23,9 +23,18 @@ class Plugin(Source):
                         yield root, path
 
     def recent(self, since):
+        yield from self.activity(since)
+
+    def during(self, window):
+        yield from self.activity(window.start, window)
+
+    def activity(self, since, window=None):
         for root, path in self.paths(since):
+            when = modified(path)
+            if window is not None and not window.contains(when):
+                continue
             named = title(path)
-            yield {'time': modified(path), 'where': str(path), 'bound': {'path': path},
+            yield {'time': when, 'where': str(path), 'bound': {'path': path},
                    'group': f"notes in {root}",
                    'headline': path.relative_to(root).as_posix() + ('' if named == path.stem else f" — {named}"),
                    'locator': str(path)}

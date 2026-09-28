@@ -140,7 +140,10 @@ for the native-client check or report a result you could not obtain.
    Word matching is literal; do not require an exact question to match its answer.
 2. Inspect the outcome and source coverage. Open a returned `evidence` with `read`, for example
    `characters=12000, lines=40`. State what you found and which source you actually read.
-3. If nothing matches, try a known word or inspect `recent`. If the corpus is missing or stale,
+3. If nothing matches, try a known word or inspect `recent`. For a known historical interval, use
+   `during(start="2026-04-08T09:50:00Z", end="2026-04-08T10:10:00Z", characters=8000)`;
+   the start is included, the end excluded, and both timestamps require timezone offsets.
+   If the corpus is missing or stale,
    run the chosen export command and retry. Do not treat incomplete coverage as absence.
    If output is over budget, follow its next steps or narrow the query.
 

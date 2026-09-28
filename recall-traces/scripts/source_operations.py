@@ -1,15 +1,15 @@
 import itertools
-import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 import recall_archive
 from plugins import git as git_source, memory as memory_source, notes as notes_source, sessions as session_source
 from recall_bounds import within
 from recall_core import REPO_REV, mentions, modified
 from recall_operations import AccessDenied, Evidence, Operation, Outcome, Passage, Value
+from recall_time import TimeWindow
 
 FOLDER_PATTERNS = ('*.md', '*.txt', '*.json')
 EMPTY_QUERY = Outcome(status='failed', code='empty_query', next_steps=['Give words separated by spaces.'])
@@ -18,6 +18,17 @@ EMPTY_QUERY = Outcome(status='failed', code='empty_query', next_steps=['Give wor
 class Recent(Value):
     days: int = Field(default=7, ge=1)
     where: str | None = None
+
+
+class During(Value):
+    start: str = Field(description='Inclusive ISO timestamp with a timezone offset.')
+    end: str = Field(description='Exclusive ISO timestamp with a timezone offset.')
+    where: str | None = None
+
+    @model_validator(mode='after')
+    def valid_window(self):
+        TimeWindow.parse(self.start, self.end)
+        return self
 
 
 class Search(Value):
@@ -137,15 +148,12 @@ class Sessions:
         return Coverage([Path(store['corpus']) for store in stores],
                         [root for root in self.roots() if not root.is_dir()], warnings, recovery)
 
-    def recent(self, since):
-        for trace in self.legacy.recent(since):
+    def during(self, window):
+        for trace in self.legacy.during(window):
             path = Path(trace['locator'].split(' start=')[0])
-            store = path.with_suffix('.topics.json')
-            topics = (json.loads(store.read_text(encoding='utf-8')).get(trace['start'].astimezone().date().isoformat())
-                      if store.is_file() and self.legacy.options.get('topics', True) else None)
             yield trace, path, '\n'.join([trace['headline'], *trace['quotes']]), {
                 'event_time': iso(trace['time']), 'day_start': iso(trace['start']), 'project': trace['where'],
-                'automated': trace['automated'], 'untitled': trace['untitled'], 'topics': topics}
+                'automated': trace['automated'], 'untitled': trace['untitled'], 'topics': trace['topics']}
 
     def search(self, words, since):
         for hit in self.legacy.search(words, since):
@@ -177,8 +185,8 @@ class Memory:
         roots = self.roots()
         return Coverage([r for r in roots if r.is_dir()], [r for r in roots if not r.is_dir()])
 
-    def recent(self, since):
-        for trace in self.legacy.recent(since):
+    def during(self, window):
+        for trace in self.legacy.during(window):
             yield trace, Path(trace['locator']), trace['headline'], {
                 'modified_at': iso(trace['time']), 'project': trace['where'], 'group': trace['group']}
 
@@ -206,8 +214,8 @@ class Notes:
         roots = self.roots()
         return Coverage([r for r in roots if r.is_dir()], [r for r in roots if not r.is_dir()])
 
-    def recent(self, since):
-        for trace in self.legacy.recent(since):
+    def during(self, window):
+        for trace in self.legacy.during(window):
             yield trace, Path(trace['locator']), trace['headline'], {
                 'modified_at': iso(trace['time']), 'group': trace['group']}
 
@@ -251,8 +259,9 @@ class Git:
         found = [repo for repo in git_source.repos(self.options) if git_source.active(repo, since)]
         yield from git_source.across(found, lambda repo: git_source.commits(repo, since, words, full=True))
 
-    def recent(self, since):
-        for repo, commit in self.commits(since):
+    def during(self, window):
+        found = git_source.repos(self.options)
+        for repo, commit in git_source.across(found, lambda repo: git_source.commits(repo, full=True, window=window)):
             trace = {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],
                      'locator': f"{repo.as_posix()}@{commit['rev']}"}
             yield trace, None, commit['subject'], {
@@ -305,7 +314,8 @@ class Plugin:
         self.source = KINDS[self.kind](options) if self.kind in KINDS else None
 
     def catalog(self):
-        operations = [Operation('recent', 'Traces of recent days from this source, newest first.', Recent),
+        operations = [Operation('during', 'Traces in [start, end), newest first. Sessions use message time, Git author time, notes/memory modification time.', During),
+                      Operation('recent', 'A time window ending now, starting days ago.', Recent),
                       Operation('search', 'Places where the query words occur, best matches first.', Search),
                       Operation('read', 'Read the place identified by evidence, with a continuation.', Read),
                       Operation('health', 'Warnings about missing or stale parts of this source.')]
@@ -362,11 +372,12 @@ class Plugin:
                                       context={'first_line': start, 'last_line': start + len(rows) - 1,
                                                'modified_at': observed, **extra})
                         start += len(rows)
-        elif operation == 'recent':
-            since = since_of(parameters['days'])
+        elif operation in ('recent', 'during'):
+            interval = (TimeWindow.past(parameters['days']) if operation == 'recent' else
+                        TimeWindow.parse(parameters['start'], parameters['end']))
             found = []
-            for trace, path, text, extra in self.source.recent(since):
-                if trace['time'] < since or not mentions(trace['where'], parameters['where']):
+            for trace, path, text, extra in self.source.during(interval):
+                if not mentions(trace['where'], parameters['where']):
                     continue
                 if not admit(trace['bound'], path):
                     continue

@@ -36,18 +36,22 @@ def repos(options, ttl=600):
     return sorted(set(FOUND[key][1]) | set(explicit))
 
 
-def commits(repo, since=None, words=(), full=False):
+def commits(repo, since=None, words=(), full=False, window=None):
     args = ['log', '--branches', '--name-only',
             f"--format=%x1e{'%H' if full else '%h'}%x1f%aI%x1f%s%x1f%(trailers:key=Co-Authored-By,valueonly,separator=%x2C )"]
-    if since:
+    if since and window is None:
         args.append(f'--since={since.isoformat()}')
     if words:
         args += ['-i', *[f'--grep={word}' for word in words]]
     for record in git(repo, *args).split('\x1e')[1:]:
         head, *files = record.strip('\n').split('\n')
         rev, when, subject, partners = head.split('\x1f', 3)
+        moment = datetime.fromisoformat(when)
+        # Git's date filters use committer time; this stream exposes author time.
+        if window is not None and not window.contains(moment):
+            continue
         voices = ', '.join(name.split(' <')[0] for name in partners.split(', ') if name.strip())
-        yield {'rev': rev, 'time': datetime.fromisoformat(when),
+        yield {'rev': rev, 'time': moment,
                'subject': subject + (f" [co-author: {voices}]" if voices else ''),
                'bound': {'repo': repo, 'files': [repo / name for name in files if name]}}
 

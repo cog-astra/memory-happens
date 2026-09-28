@@ -26,10 +26,19 @@ class Plugin(Source):
                     yield root, path
 
     def recent(self, since):
+        yield from self.activity(since)
+
+    def during(self, window):
+        yield from self.activity(window.start, window)
+
+    def activity(self, since, window=None):
         for root, path in self.paths(since):
+            when = modified(path)
+            if window is not None and not window.contains(when):
+                continue
             fields = frontmatter(path.read_text(encoding='utf-8', errors='replace'))
             project = path.parent.parent.name
-            yield {'time': modified(path), 'where': project, 'bound': {'project': project},
+            yield {'time': when, 'where': project, 'bound': {'project': project},
                    'group': f"memory in {root}",
                    'headline': f"{path.relative_to(root).as_posix()} — {' '.join(fields.get('description', '').split())[:140]}",
                    'locator': str(path)}
