@@ -430,6 +430,25 @@ class SourceOperationsTest(unittest.TestCase):
             evidence = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
             self.assertEqual(self.run_op(runner, 'git', 'read', {'evidence': evidence})[1]['code'], 'access_denied')
 
+    def test_git_read_checks_unicode_paths_and_both_merge_parents(self):
+        name = 'open/private file \u21161.txt'
+        private = commit(self.friend, {name: 'hidden'}, 'unicode_boundary_canary')
+        (self.friend / 'humans.txt').write_text(f'[recall]\nopen = .\nprivate = {name}, closed/\n', encoding='utf-8')
+        main = git(self.friend, 'branch', '--show-current')
+        git(self.friend, 'checkout', '-qb', 'side')
+        commit(self.friend, {'closed/side.txt': 'hidden'}, 'side update')
+        git(self.friend, 'checkout', main)
+        commit(self.friend, {'open/main.txt': 'public'}, 'main update')
+        git(self.friend, 'merge', '--no-ff', 'side', '-m', 'merge_boundary_canary')
+        merged = git(self.friend, 'rev-parse', 'HEAD')
+        self.bounds = Bounds([str(self.base / 'spaces')], str(self.outsider))
+        runner = self.runner()
+        for revision in (private, merged):
+            evidence = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
+            self.assertEqual(self.run_op(runner, 'git', 'read', {'evidence': evidence})[1]['code'], 'access_denied')
+        records, _ = self.run_op(runner, 'git', 'search', {'query': 'boundary_canary'})
+        self.assertEqual(records, [])
+
     def test_another_reader_cannot_open_what_a_source_owner_closes(self):
         runner = self.runner()
         for evidence in ({'source': 'folder', 'locator': f'{self.secret} start=1'},

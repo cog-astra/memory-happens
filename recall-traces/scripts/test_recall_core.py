@@ -283,6 +283,11 @@ class RecallTest(unittest.TestCase):
         self.assertTrue(Recall(aliased_cfg, reader=str(self.outsider)).read(
             str(self.space / 'closed' / 'note.md')).startswith('Closed:'))
 
+        sessions = self.space / 'closed' / 'session-alias'
+        self.link_directory(sessions, self.corpus / 'C--Work')
+        self.assertTrue(recall.read(str(sessions / 'abc.md')).startswith('Closed:'))
+        self.assertIn("Let's build a garden", recall.read(str(self.corpus / 'C--Work' / 'abc.md')))
+
     def test_rules_decide_and_the_rules_themselves_stay_readable(self):
         self.rules.write_text('For people only.\n', encoding='utf-8')
         self.assertEqual(self.sessions_seen(self.recall()), {'abc'})

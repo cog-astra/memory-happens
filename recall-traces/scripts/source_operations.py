@@ -520,7 +520,7 @@ class Plugin:
         if repo is None or evidence.revision not in (None, revision):
             yield Outcome(status='unsupported', code='incompatible_evidence')
             return
-        files = [repo / name for name in git_source.git(repo, 'show', '--name-only', '--format=', revision).split('\n') if name]
+        files = git_source.changed_paths(repo, revision)
         if self.places.hidden({'repo': repo, 'files': files}):
             raise AccessDenied('The commit lies in a closed personal space.')
         context.require(*([name.resolve().as_posix() for name in files] if hides_path(self.bounds, repo) else [repo.as_posix()]))

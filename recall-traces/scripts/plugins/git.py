@@ -65,6 +65,11 @@ def active(repo, since):
     return not since or not log.is_file() or modified(log) >= since
 
 
+def changed_paths(repo, revision):
+    names = git(repo, 'diff-tree', '--root', '-m', '-r', '--no-commit-id', '--name-only', '-z', revision)
+    return list(dict.fromkeys(repo / name for name in names.split('\x00') if name))
+
+
 def across(found, work):
     with ThreadPoolExecutor(8) as pool:
         for repo, results in zip(found, pool.map(lambda repo: list(work(repo)), found)):
@@ -100,8 +105,7 @@ class Plugin(Source):
         if not match or not Path(match[1]).is_dir():
             return None
         repo = Path(match[1])
-        files = git(repo, 'diff-tree', '--root', '-m', '-r', '--no-commit-id', '--name-only', '-z', match[2]).split('\x00')
-        return {'repo': repo, 'files': [repo / name for name in files if name]}
+        return {'repo': repo, 'files': changed_paths(repo, match[2])}
 
     def read(self, target, start, lines, characters):
         match = REPO_REV.match(target)

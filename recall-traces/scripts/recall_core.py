@@ -164,7 +164,10 @@ class Recall:
     def read(self, target, start=1, lines=80, characters=6000):
         target, _, given = target.removeprefix('read: ').partition(' start=')
         start = int(given) if given.isdigit() else start
-        bound =next((b for plugin in self.plugins if (b := plugin.bound_of(target)) is not None), {'path': target})
+        space = self.bounds.owner_of(target) if Path(target).is_file() else None
+        if space:
+            return self.bounds.refusal(target, space)
+        bound = next((b for plugin in self.plugins if (b := plugin.bound_of(target)) is not None), {'path': target})
         space = self.space_of(bound)
         if space:
             return self.bounds.refusal(target, space)
