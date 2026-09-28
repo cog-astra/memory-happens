@@ -13,6 +13,9 @@ Finding a matching passage is a lead; it does not establish the meaning of a dec
 [BOOTSTRAP.md](BOOTSTRAP.md) guides the first connection over a synthetic Git history.
 Already have material to recall? [CONNECT.md](CONNECT.md) guides connecting your chosen sources.
 
+**Compare workflows.** [Run literal and trigram recall on the same notes](examples/workflows/README.md),
+including an exact match, a word-form difference and a miss. Both recipes are editable JSON; no model is required.
+
 **For an agent receiving this link:** briefly explain the project, then use BOOTSTRAP's
 read-only checks to offer a concrete demo setup for approval. Do not require the user to know
 the setup steps or ask a second question to discover them. Install only after approval;
