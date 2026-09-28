@@ -7,6 +7,8 @@ change or unresolved question without asking the human to reconstruct it each ti
 The implementation provides MCP tools for recent activity, search and reading sources.
 Finding a matching passage is a lead; it does not establish the meaning of a decision.
 
+**See it first.** [Walk through a recorded synthetic recall](https://cog-astra.github.io/memory-happens/) in your browser; no installation required.
+
 **Try a first recall.** Give an agent (Claude Code or Codex) this repository's URL.
 [BOOTSTRAP.md](BOOTSTRAP.md) guides the first connection over a synthetic Git history.
 Already have material to recall? [CONNECT.md](CONNECT.md) guides connecting your chosen sources.
