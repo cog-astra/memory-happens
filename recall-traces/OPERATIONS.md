@@ -197,6 +197,30 @@ These are executable Python plugins, just like the selector; configure only trus
 They become available to custom `operation_run` recipes. The convenience recipes keep their
 existing behavior, and models or other dependencies are not installed by configuration loading.
 
+Notes, session and memory sources expose `expand(before_lines=20, after_lines=20)` with an
+`anchors` input port. Each anchor must have exactly one evidence from that source with a
+positive `start=` line. The operation reads around that line, clipping at file boundaries,
+and repeats the existing read access checks. It keeps overlapping windows separate.
+Each output carries the original anchor ID/evidence and the read outcome in `context.expansion`;
+the ordinary evidence and first/last line describe the expanded window.
+The first failed read stops expansion. A window beyond EOF gives `partial/empty_expansions`;
+changed observations give `source_changed`. Per-window read continuations are also collected
+in the expansion outcome's `continuation.anchors`. This expands around the locator's start
+line, not around every occurrence in a search result or an entire multi-line input passage.
+Git and folder sources do not expose this operation.
+
+For example, this single `operation_run` recipe can select a reason from lines next to a match:
+
+```json
+[
+  {"name": "found", "plugin": "notes", "operation": "search", "parameters": {"query": "invoice"}},
+  {"name": "nearby", "plugin": "notes", "operation": "expand",
+   "parameters": {"before_lines": 1, "after_lines": 1}, "inputs": {"anchors": "found"}},
+  {"name": "reason", "plugin": "selector", "operation": "select",
+   "parameters": {"query": "rollback"}, "inputs": {"passages": "nearby"}}
+]
+```
+
 Notes and session sources also expose `passages(lines=40)`: all accessible file text in
 consecutive physical line windows, ordered by path and line. There is no query, age filter
 or candidate limit. The source's configured file enumeration and access boundaries still

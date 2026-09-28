@@ -1,4 +1,5 @@
 import itertools
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -61,6 +62,11 @@ class Read(Value):
 
 class Passages(Value):
     lines: int = Field(default=40, ge=1)
+
+
+class Expand(Value):
+    before_lines: int = Field(default=20, ge=0)
+    after_lines: int = Field(default=20, ge=0)
 
 
 def iso(moment):
@@ -333,6 +339,9 @@ class Plugin:
                       Operation('health', 'Warnings about missing or stale parts of this source.')]
         if self.kind in ('notes', 'sessions'):
             operations.append(Operation('passages', 'Read all accessible text in line windows before selection.', Passages))
+        if self.kind in ('notes', 'sessions', 'memory'):
+            operations.append(Operation('expand', 'Read a line neighborhood around each anchor locator; keep anchors separate.',
+                                        Expand, inputs=('anchors',)))
         return operations
 
     def evidence(self, locator, path, revision=None):
@@ -353,6 +362,9 @@ class Plugin:
             return
         if operation == 'read':
             yield from self.read(parameters, context)
+            return
+        if operation == 'expand':
+            yield from self.expand(parameters, inputs['anchors'], context)
             return
         if not coverage.present:
             yield coverage.outcome(self.kind)
@@ -415,6 +427,46 @@ class Plugin:
             for hit in ranked(hits, parameters['limit']):
                 yield hit_passage(self.evidence(hit['locator'], hit['path'], hit['extra'].get('revision')), hit)
         yield coverage.outcome(self.kind)
+
+    def expand(self, parameters, anchors, context):
+        windows = []
+        for anchor in anchors:
+            if len(anchor.evidence) != 1 or anchor.evidence[0].source != self.alias:
+                yield Outcome(status='unsupported', code='incompatible_anchor', message=f'Anchor {anchor.id} needs one evidence from {self.alias}.')
+                return
+            evidence = anchor.evidence[0]
+            _, separator, line = evidence.locator.partition(' start=')
+            if not separator or re.fullmatch(r'[1-9][0-9]*', line) is None or self.kind == 'git':
+                yield Outcome(status='unsupported', code='line_anchor_required', message=f'Anchor {anchor.id} needs a positive start= line.')
+                return
+            center = int(line)
+            start = max(1, center - parameters['before_lines'])
+            windows.append((anchor, evidence, center, start))
+        changed, empty, continuation = False, [], []
+        for anchor, evidence, center, start in windows:
+            if context.cancelled.is_set():
+                yield Outcome(status='cancelled')
+                return
+            events = list(self.read({'evidence': evidence.model_dump(), 'start': start,
+                                     'lines': center + parameters['after_lines'] - start + 1}, context))
+            outcome = events[-1]
+            if outcome.status not in ('success', 'partial'):
+                yield outcome.model_copy(update={'message': f'Anchor {anchor.id}: {outcome.message or outcome.code}'})
+                return
+            if len(events) == 1:
+                empty.append(anchor.id)
+            changed |= outcome.code == 'source_changed'
+            if outcome.continuation:
+                continuation.append({'anchor_id': anchor.id, 'evidence': evidence.model_dump(), **outcome.continuation})
+            for item in events[:-1]:
+                item.context['expansion'] = {'anchor_id': anchor.id, 'anchor': evidence.model_dump(),
+                                             'line': center, 'read_outcome': outcome.model_dump()}
+                yield item
+        yield Outcome(status='partial' if empty else 'success',
+                      code='empty_expansions' if empty else 'source_changed' if changed else '',
+                      message=f'No lines for anchors: {", ".join(empty)}.' if empty else '',
+                      continuation={'anchors': continuation} if continuation else None,
+                      next_steps=['Continue individual windows with read using continuation.anchors.'] if continuation else [])
 
     def read(self, parameters, context):
         evidence = Evidence.model_validate(parameters['evidence'])
