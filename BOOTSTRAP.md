@@ -98,5 +98,7 @@ enough `characters`.
 To connect existing notes, repositories, project memory or session logs, continue with
 [Recall your own sources](CONNECT.md). It reuses this clone and environment, covers the first
 archive export where needed, and verifies a search and source read through the client.
+For session history, also [refresh and back up the archive](CONNECT.md#keep-sessions-searchable-over-time)
+so conversations remain searchable after the original logs are removed. The demo does not set this up.
 
 If a step fails or is unclear, open an issue. Say what you ran and what you saw.

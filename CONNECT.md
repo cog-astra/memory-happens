@@ -50,7 +50,7 @@ below, not the raw JSONL directory. Existing boundary rules can be included usin
 when migrating an installation. They are cooperative filtering, not a sandbox. Connect only
 material the user has authorized the calling agent to read.
 
-### Raw Claude or Codex sessions: export once
+### Raw Claude or Codex sessions: first export
 
 Skip this section if the selected source is already readable. Otherwise choose an archive
 destination separate from the source: neither directory may contain the other. The first
@@ -86,10 +86,23 @@ Point the sessions source at the resulting corpus. For freshness warnings, add `
 ```
 
 For Claude, `live` is `<raw-projects>` and `archiver` is `archive_claude.py`.
-Keep the exact export command for refresh: repeat it after new conversations. Automatic
-refresh is optional; the Windows `install-*-archive.ps1` scripts create scheduled tasks and
+
+### Keep sessions searchable over time
+
+Keep the exact export command and repeat it after new conversations, using the same archive
+destination. MCP reads the exported corpus; it does not archive new conversations automatically.
+Before cleaning up original session logs, export them and verify a known passage through recall.
+Already exported copies and their searchable projections remain when original logs are deleted.
+Conversations deleted before the first successful export cannot be recovered by this archive.
+
+Include the entire `<archive>` directory in your regular backup to a separate storage location,
+including raw copies, `sessions-corpus`, manifests and any revisions. A copy alongside the live
+logs does not protect against losing that disk. Keep the configured corpus path available to recall,
+or update it if you restore the archive elsewhere.
+
+Automatic refresh is optional; the Windows `install-*-archive.ps1` scripts create scheduled tasks and
 need separate consideration of their configured paths. Do not schedule them during this first
-connection. Archives retain copies even if original logs are later deleted.
+connection.
 
 ## Register the configured server
 
