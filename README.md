@@ -8,6 +8,7 @@ The implementation provides MCP tools for recent activity, search and reading so
 Finding a matching passage is a lead; it does not establish the meaning of a decision.
 
 **See it first.** [Walk through a recorded synthetic recall](https://cog-astra.github.io/memory-happens/) in your browser; no installation required.
+Or [reopen a past conversation and handover note](https://cog-astra.github.io/memory-happens/sessions.html), including a search that misses both.
 
 **Try a first recall.** Give an agent (Claude Code or Codex) this repository's URL.
 [BOOTSTRAP.md](BOOTSTRAP.md) guides the first connection over a synthetic Git history.

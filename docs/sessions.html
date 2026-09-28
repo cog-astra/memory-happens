@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why did we disable retries? — memory-happens</title>
+<style>
+:root{color-scheme:light;background:#f4f2eb;color:#202c30;font:18px/1.6 system-ui,sans-serif}
+body{max-width:900px;margin:0 auto;padding:48px 24px 70px}h1{font-size:clamp(2rem,5vw,3.3rem);line-height:1.12;max-width:760px;letter-spacing:-.035em}h2{font-size:1.35rem;margin-top:2.4rem}h3{font-size:1.1rem;margin:.6rem 0}.label{font-size:.8rem;font-weight:650;color:#42685f;text-transform:uppercase;letter-spacing:.05em}.lead{font-size:1.15rem;max-width:730px}.box,article{background:#fff;border:1px solid #d6dfd8;border-radius:12px;padding:22px;margin:18px 0}code{background:#e7eee8;padding:2px 5px;border-radius:3px}pre{font:14px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7f5;padding:16px;border-radius:8px}summary{cursor:pointer;color:#245d4c;font-weight:600;padding:8px 0}summary:focus-visible,a:focus-visible{outline:3px solid #ae6532;outline-offset:4px}.small{font-size:.86rem;color:#516363}a{color:#245d4c}footer{margin-top:3rem;border-top:1px solid #ccd6ce;padding-top:1rem}.failure{border-left:4px solid #b37436}
+</style>
+<main>
+<div class="label">memory-happens · recorded example · technical beta</div>
+<h1>“Why did we disable automatic retries?”</h1>
+<p class="lead">The context is gone. The conversation and handover note are still there. Give your agent a way to look them up.</p>
+<p class="small">This example uses invented records. The search and reads below were executed through MCP on the released code. It is a replay, not a live search or a model answering your question.</p>
+<h2>What was connected</h2>
+<p>Two synthetic Codex sessions, exported with the supplied archiver, and one Markdown note. One session discusses invoice delivery; the other discusses image uploads. No model or vector database was used.</p>
+<div class="box"><div class="label">A manually chosen search word</div><p><code>search(query="invoice", characters=8000)</code></p><strong>Two findings: one session and one note.</strong><p class="small">The unrelated upload session was not returned. These results do not measure retrieval quality on a larger corpus.</p></div>
+<article><div class="label">sessions · billing.md start=10</div>
+<h3>The earlier conversation</h3>
+<p>The reason was recorded here.</p>
+<details><summary>Open the recorded passage</summary><pre>## 2026-04-08T10:00:00Z [user] L2:B0
+
+The invoice request timed out, but the customer received two invoices. How did that happen?
+
+## 2026-04-08T10:01:00Z [assistant] L3:B0
+
+The provider accepted the first request before our timeout. Our retry sent it again. The provider does not support an idempotency key on this endpoint.
+
+## 2026-04-08T10:02:00Z [user] L4:B0
+
+Disable automatic retries for invoice sends. After a timeout, check the provider dashboard before anyone resends.</pre></details></article>
+<article><div class="label">notes · billing.md start=3</div>
+<h3>The handover note</h3>
+<p>The instruction survived here.</p>
+<details><summary>Open the recorded passage</summary><pre># Billing handover
+
+Invoice sends: automatic retries are disabled. After a timeout, check the provider dashboard before resending.</pre></details></article>
+<h2>Read what was said then</h2>
+<p class="small">The cards identify the search hits. Each recorded read requested a wider window from line 1; the session header is omitted here.</p>
+<p>The recorded conversation says the first request reached the provider before the timeout; retrying sent it again. The note preserves the instruction to check the provider dashboard before resending.</p>
+<p>Those are the synthetic sources. Deciding what they mean for today's code remains with the person or agent reading them.</p>
+<div class="box failure"><div class="label">A miss in the same corpus</div><p><code>search(query="duplicate", characters=8000)</code> returned zero findings. The conversation describes two invoices, but never uses that word.</p><p>The result suggests other words, a wider period or another connected source. Empty results are not proof that an event never happened.</p></div>
+<h2>Try one question from your own past work</h2>
+<p><a href="https://github.com/cog-astra/memory-happens/blob/main/BOOTSTRAP.md">Start with the isolated demo</a>, then <a href="https://github.com/cog-astra/memory-happens/blob/main/CONNECT.md">connect a source you choose</a>. Supported raw session logs need an export; Markdown notes can be connected directly.</p>
+<footer class="small">Recorded 2026-09-28T07:36:13.704952+00:00. Release <code>841dd62e6032f46dcf46ed37d4751354c8318124</code>. Four SDK MCP calls: one search, two reads, one empty search. The passages shown omit the session file header and local machine paths. This is a hand-built example, not evidence of time savings or superiority over shell search. Public product demo: <a href="https://cog-astra.github.io/memory-happens/">memory-happens</a>.</footer>
+</main></html>
