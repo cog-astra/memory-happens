@@ -21,6 +21,7 @@ from recall_time import TimeWindow
 
 INSTRUCTIONS = '''Recall across connected sources. Start with recent or search, then read the returned evidence.
 For a historical interval, use during(start, end) with explicit timezone offsets; start is included, end excluded.
+For an event's neighborhood, around(time, seconds) uses seconds on EACH side of its timezone-aware time.
 These tools execute recipes through the same operations listed by operation_catalog. For custom workflows,
 use operation_run; an input port names an earlier step. Intermediate records stay inside the call.
 Every call states characters. Oversized output is replaced by a diagnostic, never silently truncated.
@@ -184,6 +185,22 @@ def create_server(config_path, reader=None, selector='plugins.select_literal'):
                                          next_steps=['Give start < end as ISO timestamps with explicit timezone offsets.']), characters)
         configuration = configured()
         return execute(configuration, configuration.recipe('during', {**interval.parameters(), 'where': where}, limit), characters, view)
+
+    @server.tool(description='Activity around a known event time. Seconds apply on EACH side: 600 means ten minutes before and after. Same half-open interval and source time bases as during.')
+    def around(
+        time: Annotated[str, Field(description='Center ISO timestamp with an explicit timezone offset.')],
+        seconds: Annotated[int, Field(ge=1, description='Positive seconds on each side of time.')],
+        characters: Annotated[int, Field(ge=1)],
+        where: str | None = None,
+        limit: Annotated[int | None, Field(ge=1)] = None,
+        view: Literal['first_look', 'passages', 'records'] = 'passages',
+    ) -> CallToolResult:
+        try:
+            interval = TimeWindow.around(time, seconds)
+        except ValueError as error:
+            return reply([], [], Outcome(status='failed', code='invalid_time_window', message=str(error),
+                                         next_steps=['Give an ISO time with an explicit timezone offset and positive seconds within the datetime range.']), characters)
+        return during(**interval.parameters(), characters=characters, where=where, limit=limit, view=view)
 
     @server.tool(description='Search connected sessions, memory, notes and Git. With root, search that folder and its relocated archives. Findings carry evidence for read.')
     def search(

@@ -143,6 +143,8 @@ for the native-client check or report a result you could not obtain.
 3. If nothing matches, try a known word or inspect `recent`. For a known historical interval, use
    `during(start="2026-04-08T09:50:00Z", end="2026-04-08T10:10:00Z", characters=8000)`;
    the start is included, the end excluded, and both timestamps require timezone offsets.
+   For an event and a radius, the equivalent call is
+   `around(time="2026-04-08T10:00:00Z", seconds=600, characters=8000)` — ten minutes on each side.
    If the corpus is missing or stale,
    run the chosen export command and retry. Do not treat incomplete coverage as absence.
    If output is over budget, follow its next steps or narrow the query.
