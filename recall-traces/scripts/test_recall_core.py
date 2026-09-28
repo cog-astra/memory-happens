@@ -209,6 +209,85 @@ class RecallTest(unittest.TestCase):
         self.assertEqual(self.sessions_seen(self.recall(self.space)), {'abc', 'open', 'closed'})
         self.assertEqual(self.sessions_seen(self.recall(self.space / 'guests' / 'visitor')), {'abc', 'open'})
 
+    def test_mixed_commit_is_hidden_from_search_recent_and_read(self):
+        (self.space / 'open' / 'f.txt').write_text('open update', encoding='utf-8')
+        commit(self.space, 'closed/f.txt', 'closed update', 'mixed_boundary_canary')
+        revision = subprocess.check_output(['git', '-C', str(self.space), 'rev-parse', 'HEAD'], text=True).strip()
+        recall = self.recall()
+        self.assertEqual(dict(recall.search(['mixed_boundary_canary']))['git'], [])
+        self.assertFalse(any(revision.startswith(trace['locator'].split('@')[-1])
+                             for trace in recall.recent(self.since) if trace['source'] == 'git'))
+        self.assertTrue(recall.read(f'{self.space}@{revision}').startswith('Closed:'))
+        self.assertIn('mixed_boundary_canary', self.recall(self.space).read(f'{self.space}@{revision}'))
+        self.assertEqual(len(dict(recall.search(['open change']))['git']), 1)
+
+    def test_private_exception_applies_when_the_repository_root_is_open(self):
+        self.rules.write_text('[recall]\nopen = .\nprivate = closed/\n', encoding='utf-8')
+        recall = self.recall()
+        self.assertEqual(dict(recall.search(['private change']))['git'], [])
+        self.assertEqual(len(dict(recall.search(['open change']))['git']), 1)
+
+    def link_directory(self, link, target):
+        if os.name == 'nt':
+            subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(target)], check=True, capture_output=True)
+            self.addCleanup(link.rmdir)
+        else:
+            link.symlink_to(target, target_is_directory=True)
+            self.addCleanup(link.unlink)
+
+    def test_git_file_boundaries_preserve_spaces_and_unicode(self):
+        name = 'open/private file \u21161.txt'
+        commit(self.space, name, 'closed', 'filename_boundary_canary')
+        self.rules.write_text(f'[recall]\nopen = .\nprivate = {name}\n', encoding='utf-8')
+        recall = self.recall()
+        revision = subprocess.check_output(['git', '-C', str(self.space), 'rev-parse', 'HEAD'], text=True).strip()
+        self.assertEqual(dict(recall.search(['filename_boundary_canary']))['git'], [])
+        self.assertTrue(recall.read(f'{self.space}@{revision}').startswith('Closed:'))
+        from plugins.git import Plugin, commits
+        self.assertIn(self.space / name, Plugin({}).bound_of(f'{self.space}@{revision}')['files'])
+        self.assertIn(self.space / name, next(commits(self.space))['bound']['files'])
+
+    def test_merge_checks_paths_from_both_parents_without_duplicate_hits(self):
+        self.rules.write_text('[recall]\nopen = .\nprivate = closed/\n', encoding='utf-8')
+        main = subprocess.check_output(['git', '-C', str(self.space), 'branch', '--show-current'], text=True).strip()
+        git(self.space, 'checkout', '-qb', 'side')
+        commit(self.space, 'closed/side.txt', 'secret', 'side update')
+        git(self.space, 'checkout', main)
+        commit(self.space, 'open/main.txt', 'public', 'main update')
+        git(self.space, '-c', 'user.name=t', '-c', 'user.email=t@t', 'merge', '--no-ff', 'side', '-m', 'merge_boundary_canary')
+        revision = subprocess.check_output(['git', '-C', str(self.space), 'rev-parse', 'HEAD'], text=True).strip()
+        self.assertEqual(dict(self.recall().search(['merge_boundary_canary']))['git'], [])
+        self.assertTrue(self.recall().read(f'{self.space}@{revision}').startswith('Closed:'))
+        self.assertEqual(len(dict(self.recall(self.space).search(['merge_boundary_canary']))['git']), 1)
+
+    def test_alias_read_and_folder_search_keep_lexical_and_resolved_boundaries(self):
+        alias = self.base / 'alias'
+        self.link_directory(alias, self.space)
+        (self.space / 'closed' / 'note.md').write_text('private_boundary_canary', encoding='utf-8')
+        (self.space / 'open' / 'note.md').write_text('open_boundary_canary', encoding='utf-8')
+        recall = self.recall()
+        self.assertTrue(recall.read(str(alias / 'closed' / 'note.md')).startswith('Closed:'))
+        self.assertIn('open_boundary_canary', recall.read(str(alias / 'open' / 'note.md')))
+        self.assertIn('[recall]', recall.read(str(alias / 'humans.txt')))
+        hits = dict(recall.search_folder(alias, ['boundary_canary']))[f'folder {alias}']
+        self.assertEqual([hit['excerpt'] for hit in hits], ['open_boundary_canary'])
+
+        outside = self.base / 'public'
+        outside.mkdir()
+        (outside / 'note.md').write_text('public_target_canary', encoding='utf-8')
+        reverse = self.space / 'closed' / 'alias'
+        self.link_directory(reverse, outside)
+        self.assertTrue(recall.read(str(reverse / 'note.md')).startswith('Closed:'))
+
+        aliased_cfg = {**self.cfg, 'spaces': [str(alias)]}
+        self.assertTrue(Recall(aliased_cfg, reader=str(self.outsider)).read(
+            str(self.space / 'closed' / 'note.md')).startswith('Closed:'))
+
+        sessions = self.space / 'closed' / 'session-alias'
+        self.link_directory(sessions, self.corpus / 'C--Work')
+        self.assertTrue(recall.read(str(sessions / 'abc.md')).startswith('Closed:'))
+        self.assertIn("Let's build a garden", recall.read(str(self.corpus / 'C--Work' / 'abc.md')))
+
     def test_rules_decide_and_the_rules_themselves_stay_readable(self):
         self.rules.write_text('For people only.\n', encoding='utf-8')
         self.assertEqual(self.sessions_seen(self.recall()), {'abc'})

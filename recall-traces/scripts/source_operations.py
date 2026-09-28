@@ -87,9 +87,8 @@ def hides_path(bounds, path):
 
 def hidden(bounds, bound):
     if 'files' in bound:
-        if bounds.owner_of(bound['repo']) is None and bounds.owner_of(Path(bound['repo']).resolve()) is None:
-            return False
-        return not bound['files'] or any(hides_path(bounds, name) for name in bound['files'])
+        return (any(hides_path(bounds, name) for name in bound['files']) if bound['files']
+                else hides_path(bounds, bound['repo']))
     if 'project' in bound:
         return bounds.hides_project(bound['project'])
     return hides_path(bounds, bound.get('path'))
@@ -521,7 +520,7 @@ class Plugin:
         if repo is None or evidence.revision not in (None, revision):
             yield Outcome(status='unsupported', code='incompatible_evidence')
             return
-        files = [repo / name for name in git_source.git(repo, 'show', '--name-only', '--format=', revision).split('\n') if name]
+        files = git_source.changed_paths(repo, revision)
         if self.places.hidden({'repo': repo, 'files': files}):
             raise AccessDenied('The commit lies in a closed personal space.')
         context.require(*([name.resolve().as_posix() for name in files] if hides_path(self.bounds, repo) else [repo.as_posix()]))
