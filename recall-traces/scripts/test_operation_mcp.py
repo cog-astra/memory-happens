@@ -24,8 +24,14 @@ def read(evidence):
 
 
 @asynccontextmanager
-async def server(*arguments, env=None):
-    params = StdioServerParameters(command=sys.executable, args=[str(SCRIPT), *arguments], env=env)
+async def server(*arguments, env=None, import_paths=()):
+    args = [str(SCRIPT), *arguments]
+    if import_paths:
+        paths = [str(SCRIPT.parent), *(str(path) for path in import_paths)]
+        bootstrap = (f'import runpy, sys; sys.path[:0] = {paths!r}; '
+                     'sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name="__main__")')
+        args = ['-c', bootstrap, *args]
+    params = StdioServerParameters(command=sys.executable, args=args, env=env)
     async with stdio_client(params) as streams, ClientSession(*streams, read_timeout_seconds=60) as session:
         await session.initialize()
         yield session

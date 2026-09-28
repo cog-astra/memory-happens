@@ -33,7 +33,7 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
                             self.assertIn('restart the server', reply.content[0].text)
 
     async def test_configured_transform_runs_after_different_sources_with_options(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(prefix='recall plugin ') as directory:
             base = Path(directory)
             path, cfg, _, _ = fixture(base)
             (base / 'third_party.py').write_text(textwrap.dedent('''\
@@ -56,7 +56,7 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
                                  {'name': 'empty_options', 'module': 'third_party', 'options': {}},
                                  {'name': 'fuzzy', 'module': 'trigram_selector'}]
             path.write_text(json.dumps(cfg), encoding='utf-8')
-            async with server('--sources', str(path), env={'PYTHONPATH': str(base)}) as session:
+            async with server('--sources', str(path), import_paths=[base]) as session:
                 catalog = await session.call_tool('operation_catalog', {})
                 catalog_text = catalog.content[0].text
                 self.assertIn('joined', catalog_text)
