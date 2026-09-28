@@ -102,6 +102,24 @@ class TimeWindowTest(unittest.TestCase):
         absolute = self.run_op(self.runner(), 'sessions', 'during', interval.parameters())[0]
         self.assertEqual([(r['text'], r['evidence']) for r in recent], [(r['text'], r['evidence']) for r in absolute])
 
+    def test_around_source_recipe_preserves_during_results_and_failures(self):
+        center = DAY1 + timedelta(minutes=5)
+        bounds = {'start': DAY1.isoformat(), 'end': (DAY1 + timedelta(minutes=10)).isoformat()}
+        parameters = {'time': center.isoformat(), 'seconds': 300}
+        for alias in self.options:
+            with self.subTest(alias=alias):
+                expected, expected_outcome = self.run_op(self.runner(), alias, 'during', bounds)
+                actual, outcome = self.run_op(self.runner(), alias, 'around', parameters)
+                fields = lambda records: [(r['text'], r['evidence'], r['context'], r['access']) for r in records]
+                self.assertEqual(fields(actual), fields(expected))
+                self.assertEqual(outcome, expected_outcome)
+        for time, seconds in [('bad', 600), ('2020-01-01T10:00:00', 600),
+                              (center.isoformat(), 0), (center.isoformat(), -1),
+                              (center.isoformat(), 10**30), ('9999-12-31T23:59:59Z', 600)]:
+            records, outcome = self.run_op(self.runner(), 'sessions', 'around', {'time': time, 'seconds': seconds})
+            self.assertEqual(records, [])
+            self.assertEqual(outcome['status'], 'failed')
+
 
 class TimeWindowMCPTest(unittest.IsolatedAsyncioTestCase):
     async def test_historical_window_and_reopen_without_recent(self):
@@ -116,6 +134,7 @@ class TimeWindowMCPTest(unittest.IsolatedAsyncioTestCase):
             async with server('--sources', str(path)) as session:
                 names = {tool.name for tool in (await session.list_tools()).tools}
                 self.assertIn('during', names)
+                self.assertIn('around', names)
                 response = await session.call_tool('during', {'start': '2020-04-08T11:50:00+02:00',
                                                               'end': '2020-04-08T12:10:00+02:00', 'characters': 20000})
                 self.assertFalse(response.is_error)
@@ -128,6 +147,20 @@ class TimeWindowMCPTest(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn('Before the window', record['text'])
                 self.assertNotIn('After the window', record['text'])
                 self.assertTrue(all(step['operation'].endswith('.during') for step in result['steps'][:-1]))
+                around = await session.call_tool('around', {'time': '2020-04-08T12:00:00+02:00',
+                                                            'seconds': 600, 'characters': 20000})
+                self.assertFalse(around.is_error)
+                self.assertEqual(json.loads(around.content[0].text), around.structured_content)
+                self.assertEqual([(r['text'], r['evidence']) for r in around.structured_content['records']],
+                                 [(r['text'], r['evidence']) for r in result['records']])
+                self.assertEqual(around.structured_content['outcome'], result['outcome'])
+                self.assertTrue(all(step['operation'].endswith('.during') for step in around.structured_content['steps'][:-1]))
+                too_small = await session.call_tool('around', {'time': '2020-04-08T10:00:00Z',
+                                                               'seconds': 600, 'characters': 100})
+                self.assertEqual(too_small.structured_content['outcome']['code'], 'over_budget')
+                for time, seconds in [('2020-01-01', 600), ('bad', 600), ('9999-12-31T23:59:59Z', 600)]:
+                    invalid_around = await session.call_tool('around', {'time': time, 'seconds': seconds, 'characters': 8000})
+                    self.assertEqual(invalid_around.structured_content['outcome']['code'], 'invalid_time_window')
                 detail = await session.call_tool('read', {'evidence': record['evidence'][0], 'lines': 3, 'characters': 8000})
                 self.assertIn('remote endpoint', detail.structured_content['records'][0]['text'])
                 invalid = await session.call_tool('during', {'start': '2020-01-01', 'end': '2020-01-02', 'characters': 8000})

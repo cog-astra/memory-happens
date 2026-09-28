@@ -31,6 +31,17 @@ class During(Value):
         return self
 
 
+class Around(Value):
+    time: str = Field(description='Center ISO timestamp with an explicit timezone offset.')
+    seconds: int = Field(ge=1, description='Seconds on EACH side of time; 600 means ten minutes before and after.')
+    where: str | None = None
+
+    @model_validator(mode='after')
+    def valid_window(self):
+        TimeWindow.around(self.time, self.seconds)
+        return self
+
+
 class Search(Value):
     query: str = Field(min_length=1)
     days: int | None = Field(default=None, ge=1)
@@ -315,6 +326,7 @@ class Plugin:
 
     def catalog(self):
         operations = [Operation('during', 'Traces in [start, end), newest first. Sessions use message time, Git author time, notes/memory modification time.', During),
+                      Operation('around', 'Same as during(time - seconds, time + seconds); lower bound included, upper excluded.', Around),
                       Operation('recent', 'A time window ending now, starting days ago.', Recent),
                       Operation('search', 'Places where the query words occur, best matches first.', Search),
                       Operation('read', 'Read the place identified by evidence, with a continuation.', Read),
@@ -372,8 +384,9 @@ class Plugin:
                                       context={'first_line': start, 'last_line': start + len(rows) - 1,
                                                'modified_at': observed, **extra})
                         start += len(rows)
-        elif operation in ('recent', 'during'):
+        elif operation in ('recent', 'during', 'around'):
             interval = (TimeWindow.past(parameters['days']) if operation == 'recent' else
+                        TimeWindow.around(parameters['time'], parameters['seconds']) if operation == 'around' else
                         TimeWindow.parse(parameters['start'], parameters['end']))
             found = []
             for trace, path, text, extra in self.source.during(interval):

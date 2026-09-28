@@ -134,7 +134,7 @@ of a language model's interpretation.
 
 `--sources` uses the existing source configuration for Claude and Codex session archives,
 project memory, notes and discovered Git repositories. It exposes `operation_catalog` and
-`operation_run` alongside `during`, `recent`, `search` and `read` convenience recipes. These recipes use
+`operation_run` alongside `during`, `around`, `recent`, `search` and `read` convenience recipes. These recipes use
 the same source operations and collection plugin; they do not invoke the legacy `Recall` core.
 Each source may have a unique `name` for its catalog alias. Otherwise its plugin name is used,
 with a suffix for repeated source types. Unknown source types report `unsupported`.
@@ -144,6 +144,12 @@ both boundaries are ISO timestamps with explicit timezone offsets, start is incl
 excluded. Each source exposes the same `during` operation in the catalog. `recent(days)` resolves
 `[now - days, now)` and delegates to that operation; an aggregate call shares one pair of boundaries
 across sources. `during` also accepts `where`, `limit` and `view`.
+
+`around(time, seconds)` is shorthand for `during(time - seconds, time + seconds)`, with the
+same half-open boundaries and optional `where`, `limit` and `view`. `time` requires an explicit
+timezone offset; `seconds` is a positive integer on **each** side, not the total width.
+For example, `around(time="2026-04-08T10:00:00Z", seconds=600, characters=8000)` reads
+09:50 inclusive to 10:10 exclusive. Each source also exposes `around` for custom recipes.
 
 `recent` accepts `days`, `where`, `limit` and
 `view`; `search` adds `query` and optional `root`. Without `root`, source search results are
