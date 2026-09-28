@@ -96,7 +96,10 @@ class Configuration:
         module = importlib.import_module(selector)
         self.plugins['selector'] = module if callable(getattr(module, 'catalog', None)) else module.Plugin()
         self.plugins['collect'] = Collection(self.entries)
-        operations = [ConfiguredOperation.model_validate(entry) for entry in cfg.get('operations', [])]
+        entries = cfg.get('operations', [])
+        if not isinstance(entries, list):
+            raise ValueError('operations must be a list; use [] for no additional operations.')
+        operations = [ConfiguredOperation.model_validate(entry) for entry in entries]
         names = [entry.name for entry in operations]
         if len(set(names)) != len(names) or set(names) & self.plugins.keys():
             raise ValueError('Operation names must be unique and must not replace sources or built-ins.')
