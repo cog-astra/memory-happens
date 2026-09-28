@@ -91,6 +91,23 @@ class Plugin(Source):
                 if day[-1]['time'] >= since:
                     yield self.trace(path, fields, messages[0]['time'], day, topics.get(date.isoformat()))
 
+    def during(self, window):
+        for path in self.paths():
+            fields, messages = header(path), parse(path)
+            store = path.with_suffix('.topics.json')
+            topics = (json.loads(store.read_text(encoding='utf-8'))
+                      if store.is_file() and self.options.get('topics', True) else {})
+            days = {}
+            for message in sorted(messages, key=lambda message: message['time']):
+                days.setdefault(message['time'].astimezone().date(), []).append(message)
+            for date, day in days.items():
+                selected = [message for message in day if window.contains(message['time'])]
+                if not selected:
+                    continue
+                topic = topics.get(date.isoformat()) if len(selected) == len(day) else None
+                trace = self.trace(path, fields, min(message['time'] for message in messages), selected, topic)
+                yield {**trace, 'topics': topic}
+
     def trace(self, path, fields, opened, day, topics=None):
         humans = [m for m in day if self.human(m)]
         replies = [m for m in day if m['role'] == 'assistant' and m['text'] and not m['text'].startswith(TOOL_PREFIX)]

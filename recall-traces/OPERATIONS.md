@@ -134,12 +134,18 @@ of a language model's interpretation.
 
 `--sources` uses the existing source configuration for Claude and Codex session archives,
 project memory, notes and discovered Git repositories. It exposes `operation_catalog` and
-`operation_run` alongside `recent`, `search` and `read` convenience recipes. These recipes use
+`operation_run` alongside `during`, `recent`, `search` and `read` convenience recipes. These recipes use
 the same source operations and collection plugin; they do not invoke the legacy `Recall` core.
 Each source may have a unique `name` for its catalog alias. Otherwise its plugin name is used,
 with a suffix for repeated source types. Unknown source types report `unsupported`.
 
-Every convenience call requires `characters`. `recent` accepts `days`, `where`, `limit` and
+Every convenience call requires `characters`. `during(start, end)` reads an absolute time interval:
+both boundaries are ISO timestamps with explicit timezone offsets, start is included and end
+excluded. Each source exposes the same `during` operation in the catalog. `recent(days)` resolves
+`[now - days, now)` and delegates to that operation; an aggregate call shares one pair of boundaries
+across sources. `during` also accepts `where`, `limit` and `view`.
+
+`recent` accepts `days`, `where`, `limit` and
 `view`; `search` adds `query` and optional `root`. Without `root`, source search results are
 ranked by matched words, occurrences and time, with `limit` applied per source. With `root`,
 the folder reader searches text files and relocated archives. Empty results are distinct
@@ -154,8 +160,19 @@ source configuration. Git evidence identifies a repository and revision; the con
 adapter reads commit messages and change statistics, matching the legacy source rather than
 the full-patch reader used by `--repo`.
 
-Session and commit times in recent/search use `event_time`; file modification times use `modified_at`.
-Session recent results retain daily topics and archive metadata in passage context. Transform
+Session and commit times use `event_time`; file modification times use `modified_at`.
+For `during`/`recent`, sessions select messages within the window before producing daily traces:
+`day_start` and `event_time` are the first and last selected messages, and evidence opens a selected
+message. Daily topics are retained only when the whole day's messages fit in the window. Notes
+and project memory select by modification time; Git selects by author time, not committer time.
+Session file modification time cannot exclude matching messages. These plain-file readers still
+scan timestamps, and Git traverses history to check author times; absolute bounds do not imply an index.
+
+For example, call `during(start="2026-04-08T09:50:00Z", end="2026-04-08T10:10:00Z", characters=8000)`
+to inspect a past event's neighborhood directly. A custom recipe can use a source's `during`
+step followed by a selector or reducer; no `recent` step or later date filter is needed.
+
+Session traces retain archive metadata in passage context. Transform
 plugins can combine the sources without interpreting their evidence. Configuration is loaded
 when the server starts; boundary files are reloaded for each convenience or custom recipe call.
 This mode does not install or schedule archive writers, update another MCP registration, or

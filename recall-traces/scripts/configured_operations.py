@@ -16,9 +16,11 @@ from recall_core import load_config
 from recall_operations import Operation, Outcome, Value
 from recall_recipe import run
 from recall_runner import Runner
+from recall_time import TimeWindow
 
 
 INSTRUCTIONS = '''Recall across connected sources. Start with recent or search, then read the returned evidence.
+For a historical interval, use during(start, end) with explicit timezone offsets; start is included, end excluded.
 These tools execute recipes through the same operations listed by operation_catalog. For custom workflows,
 use operation_run; an input port names an earlier step. Intermediate records stay inside the call.
 Every call states characters. Oversized output is replaced by a diagnostic, never silently truncated.
@@ -108,6 +110,9 @@ class Configuration:
         return Runner(self.plugins, policy=lambda resources: all(not self.bounds.hides(path) for path in resources))
 
     def recipe(self, operation, parameters, limit=None):
+        if operation == 'recent':
+            operation, parameters = 'during', {**TimeWindow.past(parameters['days']).parameters(),
+                                                'where': parameters.get('where')}
         names = {alias: f'source_{index}' for index, alias in enumerate(self.entries)}
         steps = [{'name': names[alias], 'plugin': alias, 'operation': operation, 'parameters': parameters,
                   'on_error': 'continue'} for alias in self.entries]
@@ -162,6 +167,23 @@ def create_server(config_path, reader=None, selector='plugins.select_literal'):
     ) -> CallToolResult:
         configuration = configured()
         return execute(configuration, configuration.recipe('recent', {'days': days, 'where': where}, limit), characters, view)
+
+    @server.tool(description='Activity in [start, end), using ISO timestamps with timezone offsets. Sessions use message time, Git author time, notes/memory modification time.')
+    def during(
+        start: str,
+        end: str,
+        characters: Annotated[int, Field(ge=1)],
+        where: str | None = None,
+        limit: Annotated[int | None, Field(ge=1)] = None,
+        view: Literal['first_look', 'passages', 'records'] = 'passages',
+    ) -> CallToolResult:
+        try:
+            interval = TimeWindow.parse(start, end)
+        except ValueError as error:
+            return reply([], [], Outcome(status='failed', code='invalid_time_window', message=str(error),
+                                         next_steps=['Give start < end as ISO timestamps with explicit timezone offsets.']), characters)
+        configuration = configured()
+        return execute(configuration, configuration.recipe('during', {**interval.parameters(), 'where': where}, limit), characters, view)
 
     @server.tool(description='Search connected sessions, memory, notes and Git. With root, search that folder and its relocated archives. Findings carry evidence for read.')
     def search(
