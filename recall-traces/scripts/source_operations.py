@@ -442,7 +442,7 @@ class Plugin:
             center = int(line)
             start = max(1, center - parameters['before_lines'])
             windows.append((anchor, evidence, center, start))
-        changed, empty, continuation = False, [], []
+        changed, empty, continuation = [], [], []
         for anchor, evidence, center, start in windows:
             if context.cancelled.is_set():
                 yield Outcome(status='cancelled')
@@ -455,16 +455,22 @@ class Plugin:
                 return
             if len(events) == 1:
                 empty.append(anchor.id)
-            changed |= outcome.code == 'source_changed'
+            if outcome.code == 'source_changed':
+                changed.append(anchor.id)
             if outcome.continuation:
                 continuation.append({'anchor_id': anchor.id, 'evidence': evidence.model_dump(), **outcome.continuation})
             for item in events[:-1]:
                 item.context['expansion'] = {'anchor_id': anchor.id, 'anchor': evidence.model_dump(),
                                              'line': center, 'read_outcome': outcome.model_dump()}
                 yield item
+        messages = []
+        if empty:
+            messages.append(f'No lines for anchors: {", ".join(empty)}.')
+        if changed:
+            messages.append(f'source_changed for anchors: {", ".join(changed)}.')
         yield Outcome(status='partial' if empty else 'success',
                       code='empty_expansions' if empty else 'source_changed' if changed else '',
-                      message=f'No lines for anchors: {", ".join(empty)}.' if empty else '',
+                      message=' '.join(messages),
                       continuation={'anchors': continuation} if continuation else None,
                       next_steps=['Continue individual windows with read using continuation.anchors.'] if continuation else [])
 

@@ -78,6 +78,12 @@ class ExpansionTest(unittest.TestCase):
         self.assertEqual(records, [])
         self.assertEqual(outcome['code'], 'access_denied')
 
+    def test_changed_source_is_reported_when_anchor_lines_disappear(self):
+        records, outcome = expand(self.runner, [anchor(self.note, 100, 'gone', observed_at='2000-01-01T00:00:00Z')])
+        self.assertEqual(records, [])
+        self.assertEqual(outcome['code'], 'empty_expansions')
+        self.assertIn('source_changed for anchors: gone', outcome['message'])
+
 
 class ExpansionMcpTest(unittest.IsolatedAsyncioTestCase):
     async def test_search_expand_select_is_one_call_with_two_documents(self):
