@@ -148,7 +148,7 @@ class Coverage:
                    if reasons else Outcome(status='success'))
         if self.outside_where:
             outcome.message = f'{outcome.message} Matching records outside where: {self.outside_where}.'.strip()
-            outcome.next_steps.append('Repeat this source search without where to include them.')
+            outcome.next_steps.append('Search this source without where for a broader scope.')
         return outcome
 
 

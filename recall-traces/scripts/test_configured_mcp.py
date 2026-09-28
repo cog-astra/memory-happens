@@ -89,7 +89,7 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 for source, count in {'sessions': 2, 'memory': 1, 'notes': 1, 'git': 1}.items():
                     outcome = steps[f'{source}.search']
                     self.assertEqual(outcome['message'], f'Matching records outside where: {count}.')
-                    self.assertEqual(outcome['next_steps'], ['Repeat this source search without where to include them.'])
+                    self.assertEqual(outcome['next_steps'], ['Search this source without where for a broader scope.'])
 
     async def test_partial_source_and_cross_source_recipe(self):
         with tempfile.TemporaryDirectory() as directory:

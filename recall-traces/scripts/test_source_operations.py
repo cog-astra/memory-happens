@@ -188,7 +188,7 @@ class SourceOperationsTest(unittest.TestCase):
                 self.assertEqual(records, [])
                 self.assertEqual(outcome['status'], 'success')
                 self.assertEqual(outcome['message'], f'Matching records outside where: {count}.')
-                self.assertEqual(outcome['next_steps'], ['Repeat this source search without where to include them.'])
+                self.assertEqual(outcome['next_steps'], ['Search this source without where for a broader scope.'])
 
     def test_search_scope_preserves_matches_order_and_omits_empty_hints(self):
         runner = self.runner()
