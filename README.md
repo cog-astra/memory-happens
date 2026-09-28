@@ -12,6 +12,7 @@ Finding a matching passage is a lead; it does not establish the meaning of a dec
 **Try a first recall.** Give an agent (Claude Code or Codex) this repository's URL.
 [BOOTSTRAP.md](BOOTSTRAP.md) guides the first connection over a synthetic Git history.
 Already have material to recall? [CONNECT.md](CONNECT.md) guides connecting your chosen sources.
+For long-term session search, [refresh and back up the session archive](CONNECT.md#keep-sessions-searchable-over-time); connecting MCP does not preserve future conversations automatically.
 
 **Compare workflows.** [Run literal and trigram recall on the same notes](examples/workflows/README.md),
 including an exact match, a word-form difference and a miss. Both recipes are editable JSON; no model is required.
