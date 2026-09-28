@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import recall_bounds
@@ -174,6 +175,71 @@ class SourceOperationsTest(unittest.TestCase):
         best = self.run_op(runner, 'sessions', 'search', {'query': 'lighthouse'})[0]
         limited = self.run_op(runner, 'sessions', 'search', {'query': 'lighthouse', 'limit': 1})[0]
         self.assertEqual([r['evidence'] for r in limited], [best[0]['evidence']])
+
+    def test_search_reports_visible_records_outside_where_in_one_scan(self):
+        runner = self.runner()
+        for alias, count in {'sessions': 4, 'memory': 1, 'notes': 1, 'git': 2}.items():
+            with self.subTest(source=alias):
+                source = runner.plugins[alias].source
+                with patch.object(source, 'search', wraps=source.search) as scan:
+                    records, outcome = self.run_op(runner, alias, 'search',
+                                                  {'query': 'lighthouse', 'where': 'no-such-project'})
+                self.assertEqual(scan.call_count, 1)
+                self.assertEqual(records, [])
+                self.assertEqual(outcome['status'], 'success')
+                self.assertEqual(outcome['message'], f'Matching records outside where: {count}.')
+                self.assertEqual(outcome['next_steps'], ['Repeat this source search without where to include them.'])
+
+    def test_search_scope_preserves_matches_order_and_omits_empty_hints(self):
+        runner = self.runner()
+        broad, _ = self.run_op(runner, 'sessions', 'search', {'query': 'lighthouse'})
+        expected = [record for record in broad if record['context']['where'] == str(self.work)]
+        scoped, outcome = self.run_op(runner, 'sessions', 'search',
+                                     {'query': 'lighthouse', 'where': 'work', 'limit': 2})
+        self.assertEqual([{key: record[key] for key in ('text', 'evidence', 'access')} for record in scoped],
+                         [{key: record[key] for key in ('text', 'evidence', 'access')} for record in expected[:2]])
+        self.assertEqual(outcome['message'], 'Matching records outside where: 1.')
+        for parameters in ({'query': 'lighthouse'}, {'query': 'lighthouse', 'where': 'Places'},
+                           {'query': 'no-such-word', 'where': 'elsewhere'}):
+            _, outcome = self.run_op(runner, 'notes', 'search', parameters)
+            self.assertEqual(outcome['message'], '')
+            self.assertEqual(outcome['next_steps'], [])
+
+    def test_outside_where_preserves_health_and_respects_policy_without_new_dependencies(self):
+        visible = self.friend / 'open' / 'visible.md'
+        visible.write_text('lighthouse', encoding='utf-8')
+        options = {**self.options['notes'], 'roots': [str(self.cape.parent.parent), str(self.friend)]}
+        runner = self.runner(notes=options)
+        records, outcome = self.run_op(runner, 'notes', 'search', {'query': 'lighthouse', 'where': 'Places'})
+        self.assertEqual(len(records), 1)
+        self.assertEqual(outcome['message'], 'Matching records outside where: 1.')
+        self.assertNotIn(visible.resolve().as_posix(), records[0]['access'])
+        runner.policy = lambda resources: visible.resolve().as_posix() not in resources
+        records, outcome = self.run_op(runner, 'notes', 'search', {'query': 'lighthouse', 'where': 'Places'})
+        self.assertEqual(len(records), 1)
+        self.assertEqual(outcome['message'], '')
+        missing = self.base / 'missing-notes'
+        options['roots'].append(str(missing))
+        _, outcome = self.run_op(self.runner(notes=options), 'notes', 'search',
+                                 {'query': 'lighthouse', 'where': 'Places'})
+        self.assertEqual(outcome['status'], 'partial')
+        self.assertEqual(outcome['code'], 'source_partial')
+        self.assertIn(str(missing), outcome['message'])
+        self.assertIn('Matching records outside where: 1.', outcome['message'])
+
+    def test_folder_reports_only_visible_matches_inside_its_root(self):
+        runner = self.runner()
+        broad, _ = self.run_op(runner, 'folder', 'search', {'query': 'lighthouse', 'root': str(self.corpus)})
+        self.assertEqual({record['evidence'][0]['locator'].split(' start=')[0] for record in broad},
+                         {str(path) for path in (self.claude, self.codex, self.shared, self.claude.with_suffix('.topics.json'))})
+        records, outcome = self.run_op(runner, 'folder', 'search',
+                                     {'query': 'lighthouse', 'root': str(self.corpus), 'where': 'no-such-folder'})
+        self.assertEqual(records, [])
+        self.assertEqual(outcome['status'], 'success')
+        self.assertEqual(outcome['message'], 'Matching records outside where: 4.')
+        _, outcome = self.run_op(runner, 'folder', 'search',
+                                {'query': 'lighthouse', 'root': str(self.cape.parent), 'where': 'Places'})
+        self.assertEqual(outcome['message'], '')
 
     def test_configured_exclusions_still_apply(self):
         excluded = {**self.options['memory'], 'exclude': [recall_bounds.slug(self.work)]}

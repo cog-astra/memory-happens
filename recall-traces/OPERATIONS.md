@@ -158,6 +158,11 @@ the folder reader searches text files and relocated archives. Empty results are 
 from missing sources or incomplete coverage. Session archive warnings are retained in outcomes.
 The internal source-collection recipe can include more than ten configured sources.
 
+When `where` excludes accessible matching records, each source search outcome names their
+count and suggests dropping `where`. Inspect the source outcomes in `steps` for aggregate
+searches. Counts stay within the connected source, date filter and optional folder root;
+a session can contribute multiple daily records. A scope hint alone remains `success`.
+
 Use a finding's `evidence` in `read`, or pass a legacy `read: path start=N` address as `path`.
 These alternatives are mutually exclusive. `start` overrides the address's line offset;
 `lines` defaults to 80. Read outcomes carry continuation and identify a changed file when

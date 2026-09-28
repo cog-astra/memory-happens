@@ -78,6 +78,19 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(denied['records'], [])
                 self.assertNotEqual(denied['outcome']['status'], 'success')
 
+    async def test_search_exposes_outside_scope_counts_in_source_outcomes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, _, _, _ = fixture(Path(directory))
+            async with server('--sources', str(path)) as session:
+                result = await self.call(session, 'search', query='cache', where='no-such-project', characters=20000)
+                self.assertEqual(result['records'], [])
+                self.assertEqual(result['outcome']['status'], 'success')
+                steps = {step['operation']: step['outcome'] for step in result['steps']}
+                for source, count in {'sessions': 2, 'memory': 1, 'notes': 1, 'git': 1}.items():
+                    outcome = steps[f'{source}.search']
+                    self.assertEqual(outcome['message'], f'Matching records outside where: {count}.')
+                    self.assertEqual(outcome['next_steps'], ['Repeat this source search without where to include them.'])
+
     async def test_partial_source_and_cross_source_recipe(self):
         with tempfile.TemporaryDirectory() as directory:
             path, cfg, notes, private = fixture(Path(directory))
