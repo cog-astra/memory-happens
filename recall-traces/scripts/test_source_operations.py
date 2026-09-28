@@ -161,11 +161,8 @@ class SourceOperationsTest(unittest.TestCase):
             found = {record['evidence'][0]['locator'] for record in records}
             self.assertEqual(found, places, alias)
             before = {hit['locator'] for hit in legacy[{'memory': 'project memory'}.get(alias, alias)]}
-            if alias == 'git':
-                legacy_only = {place.split('@')[1] for place in before} - {place.split('@')[1][:7] for place in found}
-                self.assertEqual(legacy_only, {self.mixed[:7]}, 'legacy also shows a commit touching a closed file')
-            else:
-                self.assertEqual(found, before, alias)
+            self.assertEqual({place.split('@')[0] + '@' + place.split('@')[1][:7] for place in found}
+                             if alias == 'git' else found, before, alias)
             for record in records:
                 self.assertIn('lighthouse', record['text'].casefold())
                 self.assertEqual(record['evidence'][0]['source'], alias)
@@ -420,6 +417,18 @@ class SourceOperationsTest(unittest.TestCase):
         notes = [r for r in self.run_op(runner, 'notes', 'search', {'query': 'lighthouse'})[0]]
         for record in notes:
             self.assertEqual(self.run_op(fresh, 'notes', 'read', {'evidence': record['evidence'][0]})[1]['status'], 'success')
+
+    def test_git_private_exception_in_an_open_repository(self):
+        (self.friend / 'humans.txt').write_text('[recall]\nopen = .\nprivate = closed/\n', encoding='utf-8')
+        self.bounds = Bounds([str(self.base / 'spaces')], str(self.outsider))
+        runner = self.runner()
+        records, outcome = self.run_op(runner, 'git', 'search', {'query': 'lighthouse'})
+        revisions = {record['evidence'][0]['revision'] for record in records}
+        self.assertEqual(revisions, {self.painted, self.opened})
+        self.assertEqual(outcome['code'], 'policy_filtered')
+        for revision in (self.private, self.mixed):
+            evidence = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
+            self.assertEqual(self.run_op(runner, 'git', 'read', {'evidence': evidence})[1]['code'], 'access_denied')
 
     def test_another_reader_cannot_open_what_a_source_owner_closes(self):
         runner = self.runner()

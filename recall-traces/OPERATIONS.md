@@ -73,8 +73,8 @@ The lineage, trace and envelope kept for other outputs were not measured separat
 The opt-in `git_operations_legacy` source (`repo` setting) routes existing `Recall.recent`,
 `search` and `read` through the operation reader. It is a single-repository migration adapter,
 not a replacement for Git discovery. Existing configured plugins and MCP tools are unchanged.
-The adapter uses the legacy core's boundary filtering, including the mixed-commit and
-junction-alias limitations tracked in [issue #38](https://github.com/cog-astra/memory-happens/issues/38).
+The adapter uses the legacy core's boundary filtering: a commit touching a closed path is
+hidden, and file access checks both the supplied path and its resolved target.
 The operation runner accepts its own explicit policy callback. No policy file format is required.
 
 ## Through MCP

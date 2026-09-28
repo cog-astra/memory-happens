@@ -124,8 +124,9 @@ class Recall:
 
     def space_of(self, bound):
         if 'files' in bound:
-            repo = self.bounds.owner_of(bound['repo'])
-            return repo if repo and all(self.bounds.hides(f) for f in bound['files']) else None
+            if not bound['files']:
+                return self.bounds.owner_of(bound['repo'])
+            return next((space for path in bound['files'] if (space := self.bounds.owner_of(path))), None)
         if 'project' in bound:
             return self.bounds.owner_of_project(bound['project'])
         return self.bounds.owner_of(bound.get('path'))

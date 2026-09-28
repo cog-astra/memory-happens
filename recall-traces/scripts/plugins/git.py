@@ -37,23 +37,27 @@ def repos(options, ttl=600):
 
 
 def commits(repo, since=None, words=(), full=False, window=None):
-    args = ['log', '--branches', '--name-only',
+    args = ['log', '--branches', '-m', '--name-only', '-z',
             f"--format=%x1e{'%H' if full else '%h'}%x1f%aI%x1f%s%x1f%(trailers:key=Co-Authored-By,valueonly,separator=%x2C )"]
     if since and window is None:
         args.append(f'--since={since.isoformat()}')
     if words:
         args += ['-i', *[f'--grep={word}' for word in words]]
+    found = {}
     for record in git(repo, *args).split('\x1e')[1:]:
-        head, *files = record.strip('\n').split('\n')
+        head, _, names = record.partition('\x00')
+        files = names.removeprefix('\n').split('\x00')
         rev, when, subject, partners = head.split('\x1f', 3)
         moment = datetime.fromisoformat(when)
         # Git's date filters use committer time; this stream exposes author time.
         if window is not None and not window.contains(moment):
             continue
         voices = ', '.join(name.split(' <')[0] for name in partners.split(', ') if name.strip())
-        yield {'rev': rev, 'time': moment,
-               'subject': subject + (f" [co-author: {voices}]" if voices else ''),
-               'bound': {'repo': repo, 'files': [repo / name for name in files if name]}}
+        entry = found.setdefault(rev, {'rev': rev, 'time': moment,
+                                 'subject': subject + (f" [co-author: {voices}]" if voices else ''),
+                                 'bound': {'repo': repo, 'files': []}})
+        entry['bound']['files'].extend(repo / name for name in files if name)
+    yield from found.values()
 
 
 def active(repo, since):
@@ -96,8 +100,8 @@ class Plugin(Source):
         if not match or not Path(match[1]).is_dir():
             return None
         repo = Path(match[1])
-        files = git(repo, 'show', '--name-only', '--format=', match[2]).split()
-        return {'repo': repo, 'files': [repo / name for name in files]}
+        files = git(repo, 'diff-tree', '--root', '-m', '-r', '--no-commit-id', '--name-only', '-z', match[2]).split('\x00')
+        return {'repo': repo, 'files': [repo / name for name in files if name]}
 
     def read(self, target, start, lines, characters):
         match = REPO_REV.match(target)

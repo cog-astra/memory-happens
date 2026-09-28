@@ -15,6 +15,10 @@ def within(path, folder):
     return path == folder or path.startswith(folder.rstrip(os.sep) + os.sep)
 
 
+def resolved_within(path, folder):
+    return within(Path(path).resolve(), Path(folder).resolve())
+
+
 def slug(path):
     return re.sub(r'[^A-Za-z0-9]', '-', os.path.abspath(str(path))).casefold()
 
@@ -60,7 +64,8 @@ class Bounds:
                                 and not any(Path(p).exists() for p in space['private']))]
 
     def owner_of(self, path):
-        return next((space for space in self.closed if path and closes(space, path, within)), None)
+        return next((space for space in self.closed if path and
+                     (closes(space, path, within) or closes(space, path, resolved_within))), None)
 
     def owner_of_project(self, key):
         prefix = lambda project, folder: project.casefold().startswith(slug(folder))

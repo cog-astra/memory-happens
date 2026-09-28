@@ -87,9 +87,8 @@ def hides_path(bounds, path):
 
 def hidden(bounds, bound):
     if 'files' in bound:
-        if bounds.owner_of(bound['repo']) is None and bounds.owner_of(Path(bound['repo']).resolve()) is None:
-            return False
-        return not bound['files'] or any(hides_path(bounds, name) for name in bound['files'])
+        return (any(hides_path(bounds, name) for name in bound['files']) if bound['files']
+                else hides_path(bounds, bound['repo']))
     if 'project' in bound:
         return bounds.hides_project(bound['project'])
     return hides_path(bounds, bound.get('path'))
