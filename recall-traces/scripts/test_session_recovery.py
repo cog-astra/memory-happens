@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from itertools import product
 import json
 import os
 from pathlib import Path
@@ -7,7 +8,7 @@ import tempfile
 import unittest
 
 from source_operations import Sessions
-from plugins.sessions import refresh_hint
+from plugins.sessions import SCRIPTS, refresh_hint
 
 
 class SessionRecoveryTest(unittest.TestCase):
@@ -17,11 +18,12 @@ class SessionRecoveryTest(unittest.TestCase):
         self.assertIn('no matching refresh destination', refresh_hint({**store, 'live': '/synthetic/live',
                                                                      'corpus': '/synthetic/renamed'}))
         self.assertIn('arguments are unknown', refresh_hint({**store, 'archiver': 'custom.py'}))
+        self.assertIn('arguments are unknown', refresh_hint({**store, 'archiver': '/custom/archive_claude.py'}))
         self.assertIsNone(refresh_hint({'corpus': store['corpus']}))
 
     def test_suggested_commands_populate_the_configured_corpus(self):
-        for kind in ('claude', 'codex'):
-            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+        for kind, absolute in product(('claude', 'codex'), (False, True)):
+            with self.subTest(kind=kind, absolute=absolute), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary) / "space & dollar$ apostrophe'"
                 source = root / 'live'
                 live = source / 'sessions' if kind == 'codex' else source
@@ -35,6 +37,8 @@ class SessionRecoveryTest(unittest.TestCase):
                 (live / 'session.jsonl').write_text(json.dumps(row) + '\n', encoding='utf-8')
                 corpus = root / 'custom archive' / 'sessions-corpus'
                 store = {'corpus': str(corpus), 'live': str(live), 'archiver': f'archive_{kind}.py'}
+                if absolute:
+                    store['archiver'] = str(SCRIPTS / store['archiver'])
                 reader = Sessions({'stores': [store]})
                 now = datetime.now(timezone.utc)
                 outcome = reader.coverage(now).outcome('sessions')

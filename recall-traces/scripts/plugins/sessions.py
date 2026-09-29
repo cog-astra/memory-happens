@@ -22,7 +22,10 @@ def refresh_hint(store):
     if not archiver:
         return None
     corpus = Path(store['corpus']).expanduser().absolute()
-    if archiver not in ('archive_claude.py', 'archive_codex.py'):
+    script = (SCRIPTS / Path(archiver).expanduser()).absolute()
+    kind = next((name for name in ('archive_claude.py', 'archive_codex.py')
+                 if script.resolve() == (SCRIPTS / name).resolve()), None)
+    if kind is None:
         return f'Check the configured {archiver} export procedure for {corpus}; its arguments are unknown.'
     if not store.get('live'):
         return f'Set this store\'s live source before using {archiver} to refresh {corpus}.'
@@ -30,9 +33,9 @@ def refresh_hint(store):
         return (f'Check corpus {corpus}: {archiver} writes to <destination>/sessions-corpus; '
                 'no matching refresh destination can be inferred.')
     source = Path(store['live']).expanduser().absolute()
-    if archiver == 'archive_codex.py' and source.name in ('sessions', 'archived_sessions'):
+    if kind == 'archive_codex.py' and source.name in ('sessions', 'archived_sessions'):
         source = source.parent
-    args = [Path(sys.executable).as_posix(), (SCRIPTS / archiver).as_posix(),
+    args = [Path(sys.executable).as_posix(), script.as_posix(),
             '--source', source.as_posix(), '--destination', corpus.parent.as_posix()]
     command = ('& ' + ' '.join("'" + arg.replace("'", "''") + "'" for arg in args)
                if os.name == 'nt' else shlex.join(args))
