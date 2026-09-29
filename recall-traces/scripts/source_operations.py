@@ -163,8 +163,7 @@ class Sessions:
     def coverage(self, now):
         stores = [store for store in self.legacy.stores if Path(store['corpus']).is_dir()]
         warnings = session_source.Plugin({**self.legacy.options, 'stores': stores}).health(now)
-        recovery = [f"Refresh the archive: python {session_source.SCRIPTS / store['archiver']}"
-                    for store in self.legacy.stores if store.get('archiver')]
+        recovery = [hint for store in self.legacy.stores if (hint := session_source.refresh_hint(store))]
         return Coverage([Path(store['corpus']) for store in stores],
                         [root for root in self.roots() if not root.is_dir()], warnings, recovery)
 
