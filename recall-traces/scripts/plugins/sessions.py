@@ -1,5 +1,8 @@
 import json
+import os
 import re
+import shlex
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -12,6 +15,29 @@ AUTOMATED_ORIGINS = ('subagent', 'sdk-cli')
 STALE = timedelta(hours=1)
 SILENT = timedelta(minutes=45)
 SCRIPTS = Path(__file__).resolve().parents[1]
+
+
+def refresh_hint(store):
+    archiver = store.get('archiver')
+    if not archiver:
+        return None
+    corpus = Path(store['corpus']).expanduser().absolute()
+    if archiver not in ('archive_claude.py', 'archive_codex.py'):
+        return f'Check the configured {archiver} export procedure for {corpus}; its arguments are unknown.'
+    if not store.get('live'):
+        return f'Set this store\'s live source before using {archiver} to refresh {corpus}.'
+    if corpus.name != 'sessions-corpus':
+        return (f'Check corpus {corpus}: {archiver} writes to <destination>/sessions-corpus; '
+                'no matching refresh destination can be inferred.')
+    source = Path(store['live']).expanduser().absolute()
+    if archiver == 'archive_codex.py' and source.name in ('sessions', 'archived_sessions'):
+        source = source.parent
+    args = [Path(sys.executable).as_posix(), (SCRIPTS / archiver).as_posix(),
+            '--source', source.as_posix(), '--destination', corpus.parent.as_posix()]
+    command = ('& ' + ' '.join("'" + arg.replace("'", "''") + "'" for arg in args)
+               if os.name == 'nt' else shlex.join(args))
+    shell = ' with PowerShell' if os.name == 'nt' else ''
+    return f'Refresh the archive{shell}: {command}'
 
 
 def stamp(line):
@@ -160,9 +186,10 @@ class Plugin(Source):
     def health(self, now):
         for store in self.stores:
             corpus = Path(store['corpus'])
-            fix = f"; refresh: python {SCRIPTS / store['archiver']}" if store.get('archiver') else ''
+            hint = refresh_hint(store)
+            fix = f'; {hint}' if hint else ''
             if not corpus.is_dir():
-                yield f"session corpus unavailable: {corpus} — searching without it; set in sources.json"
+                yield f"session corpus unavailable: {corpus} — searching without it; set in sources.json{fix}"
                 continue
             status = corpus.parent / 'status.json'
             if status.is_file():
