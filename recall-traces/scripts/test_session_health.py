@@ -8,6 +8,9 @@ import unittest
 
 import archive_claude
 from plugins.sessions import Plugin
+from recall_bounds import Bounds
+from recall_runner import Runner
+import source_operations
 
 
 class SessionHealthTest(unittest.TestCase):
@@ -59,6 +62,32 @@ class SessionHealthTest(unittest.TestCase):
         data['errors'] = [{'error': 'Synthetic projection failure'}]
         status.write_text(json.dumps(data), encoding='utf-8')
         self.assertTrue(any('1 errors' in warning for warning in self.warnings()))
+
+    def test_bad_manifest_preserves_search_and_falls_back_only_with_live_source(self):
+        manifest = self.destination / 'manifest.json'
+        os.utime(self.source, None)
+        for payload in ('{', '[]', '{"session":null}', '{"session":{"source_stamp":[1]}}',
+                        '{"session":{"source_stamp":[1,"bad"]}}',
+                        '{"session":{"source_stamp":[1,true]}}',
+                        '{"session":{"source_stamp":[1,1e100]}}'):
+            for live in (False, True):
+                with self.subTest(payload=payload, live=live):
+                    manifest.write_text(payload, encoding='utf-8')
+                    store = {'corpus': str(self.corpus)}
+                    if live:
+                        store['live'] = str(self.live)
+                    options = {'plugin': 'sessions', 'stores': [store]}
+                    warnings = list(Plugin(options).health(datetime.now(timezone.utc)))
+                    if live:
+                        self.assertTrue(any('manifest unavailable' in text for text in warnings))
+                        self.assertTrue(any('the corpus at' in text for text in warnings))
+                    else:
+                        self.assertEqual(warnings, [])
+                    places = source_operations.Places(Bounds([], str(self.root)), [options])
+                    runner = Runner({'sessions': source_operations.Plugin('sessions', options, places)})
+                    events = list(runner.invoke('sessions', 'search', {'query': 'original'}))
+                    self.assertEqual(len([e for e in events if e['type'] == 'record']), 1)
+                    self.assertEqual(events[-1]['outcome']['status'], 'partial' if live else 'success')
 
 
 if __name__ == '__main__':

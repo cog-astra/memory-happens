@@ -58,7 +58,19 @@ def acknowledged_source_change(corpus):
     if not manifest.is_file():
         return None
     entries = json.loads(manifest.read_text(encoding='utf-8'))
-    stamps = [entry['source_stamp'][1] for entry in entries.values() if entry.get('source_stamp')]
+    if not isinstance(entries, dict):
+        raise ValueError('expected a manifest object')
+    stamps = []
+    for entry in entries.values():
+        if not isinstance(entry, dict):
+            raise ValueError('expected a manifest entry object')
+        source_stamp = entry.get('source_stamp')
+        if source_stamp is None:
+            continue
+        if (not isinstance(source_stamp, list) or len(source_stamp) != 2
+                or any(type(value) is not int or value < 0 for value in source_stamp)):
+            raise ValueError('expected source_stamp [size, mtime_ns]')
+        stamps.append(source_stamp[1])
     return datetime.fromtimestamp(max(stamps) / 1_000_000_000, timezone.utc) if stamps else None
 
 
@@ -161,7 +173,14 @@ class Plugin(Source):
                 if state.get('errors'):
                     yield f"archive {corpus.parent}: {len(state['errors'])} errors on the last pass — listed in {status}"
             live = newest(store['live'], '*.jsonl') if store.get('live') and Path(store['live']).is_dir() else None
-            archived = acknowledged_source_change(corpus)
+            if live is None:
+                continue
+            try:
+                archived = acknowledged_source_change(corpus)
+            except (OSError, ValueError, OverflowError) as error:
+                yield (f"archive manifest unavailable: {corpus.parent / 'manifest.json'} "
+                       f"({type(error).__name__}); freshness uses corpus timestamps{fix}")
+                archived = None
             reference = 'last archived source change'
             if archived is None:
                 archived = newest(corpus, '*.md')
