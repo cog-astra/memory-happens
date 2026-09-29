@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from claude_transcript import TOOL_PREFIX
@@ -51,6 +51,15 @@ def parse(path):
 
 def newest(root, pattern):
     return max((modified(path) for path in Path(root).rglob(pattern)), default=None)
+
+
+def acknowledged_source_change(corpus):
+    manifest = corpus.parent / 'manifest.json'
+    if not manifest.is_file():
+        return None
+    entries = json.loads(manifest.read_text(encoding='utf-8'))
+    stamps = [entry['source_stamp'][1] for entry in entries.values() if entry.get('source_stamp')]
+    return datetime.fromtimestamp(max(stamps) / 1_000_000_000, timezone.utc) if stamps else None
 
 
 def clip(text, limit=220):
@@ -152,10 +161,14 @@ class Plugin(Source):
                 if state.get('errors'):
                     yield f"archive {corpus.parent}: {len(state['errors'])} errors on the last pass — listed in {status}"
             live = newest(store['live'], '*.jsonl') if store.get('live') and Path(store['live']).is_dir() else None
-            archived = newest(corpus, '*.md')
+            archived = acknowledged_source_change(corpus)
+            reference = 'last archived source change'
+            if archived is None:
+                archived = newest(corpus, '*.md')
+                reference = 'corpus'
             if live and archived and live - archived > SILENT:
                 yield (f"archive {corpus.parent} is silent: a live session changed at {live.astimezone():%H:%M}, "
-                       f"the corpus at {archived.astimezone():%H:%M}{fix}")
+                       f"the {reference} at {archived.astimezone():%H:%M}{fix}")
 
     def bound_of(self, target):
         path = Path(target.split(' start=')[0])
