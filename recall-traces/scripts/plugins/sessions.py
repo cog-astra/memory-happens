@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from claude_transcript import TOOL_PREFIX
@@ -51,6 +51,27 @@ def parse(path):
 
 def newest(root, pattern):
     return max((modified(path) for path in Path(root).rglob(pattern)), default=None)
+
+
+def acknowledged_source_change(corpus):
+    manifest = corpus.parent / 'manifest.json'
+    if not manifest.is_file():
+        return None
+    entries = json.loads(manifest.read_text(encoding='utf-8'))
+    if not isinstance(entries, dict):
+        raise ValueError('expected a manifest object')
+    stamps = []
+    for entry in entries.values():
+        if not isinstance(entry, dict):
+            raise ValueError('expected a manifest entry object')
+        source_stamp = entry.get('source_stamp')
+        if source_stamp is None:
+            continue
+        if (not isinstance(source_stamp, list) or len(source_stamp) != 2
+                or any(type(value) is not int or value < 0 for value in source_stamp)):
+            raise ValueError('expected source_stamp [size, mtime_ns]')
+        stamps.append(source_stamp[1])
+    return datetime.fromtimestamp(max(stamps) / 1_000_000_000, timezone.utc) if stamps else None
 
 
 def clip(text, limit=220):
@@ -152,10 +173,21 @@ class Plugin(Source):
                 if state.get('errors'):
                     yield f"archive {corpus.parent}: {len(state['errors'])} errors on the last pass — listed in {status}"
             live = newest(store['live'], '*.jsonl') if store.get('live') and Path(store['live']).is_dir() else None
-            archived = newest(corpus, '*.md')
+            if live is None:
+                continue
+            try:
+                archived = acknowledged_source_change(corpus)
+            except (OSError, ValueError, OverflowError) as error:
+                yield (f"archive manifest unavailable: {corpus.parent / 'manifest.json'} "
+                       f"({type(error).__name__}); freshness uses corpus timestamps{fix}")
+                archived = None
+            reference = 'last archived source change'
+            if archived is None:
+                archived = newest(corpus, '*.md')
+                reference = 'corpus'
             if live and archived and live - archived > SILENT:
                 yield (f"archive {corpus.parent} is silent: a live session changed at {live.astimezone():%H:%M}, "
-                       f"the corpus at {archived.astimezone():%H:%M}{fix}")
+                       f"the {reference} at {archived.astimezone():%H:%M}{fix}")
 
     def bound_of(self, target):
         path = Path(target.split(' start=')[0])
