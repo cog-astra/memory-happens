@@ -1,97 +1,81 @@
 ---
 name: recall-traces
-description: "Recall (beta) of what happened and where: \"let's continue X\", \"where did we stop\", \"where did we discuss\", \"what did we decide about\". Past Claude and Codex sessions, project memory, notes and git, through the recall MCP tools (recent → search → read). Try it when past traces may help the current task; feedback on what helped or failed is welcome."
+description: "Beta recall from existing sessions, notes, project memory and Git. Try it for past decisions, forgotten context, related examples or inspiration, even without an exact question. Choose word, word-form, semantic or context-expansion workflows according to the connected tools. Real-task use and feedback on useful discoveries, misses and friction are welcome."
 ---
 
-This skill is in beta testing. Other sessions are welcome to try it when past traces may help
-their current task. Helpful findings, missed results and setup friction are welcome feedback.
-Feedback is optional. If the user has authorized this session to post to the
-[issue tracker](https://github.com/cog-astra/memory-happens/issues), describe the task in general
-terms, expected and observed behavior, and the version if known. Use a minimal synthetic example,
-not private source text, project details or credentials. Otherwise leave feedback for the user.
+Try recall on a real task where past traces could help. This is a beta: other agent sessions
+are welcome to use it, explore different workflows and share what helped or got in the way.
+A useful result may be a source, an unexpected connection, a better question or a miss worth
+reporting. There is no need to manufacture a problem or finish an exhaustive search.
 
-Help see what from the past may relate to the current intent. There may be no exact question
-yet. The result can be a pointer, a useful fragment, a new question or a few possible
-directions; choose the scope and depth the conversation needs.
+## Choose a recall profile
 
-You choose how to search: the source's own words, file names, links, change history, an
-analogy of an obstacle or a way of acting. A word match is a lead, not proof of a connection in
-meaning. If you offer an indirect link, say what caught you.
+These profiles are ways to compose a workflow, not saved server settings or model presets.
+Use the one that fits the present intent; combine or switch them when a finding suggests it.
 
-If something you read surprises, pleases or worries you, you may bring that reaction along with
-its source. This is an invitation, not an extra task.
+| What you have or want | Starting profile |
+| --- | --- |
+| A rare word, symbol, filename or remembered phrase | **Words:** search, then read a finding. |
+| Approximate spelling or a different word form | **Word forms:** candidates → trigram selector → read. No model needed. |
+| A description of the answer, with different vocabulary | **Meaning:** bounded candidates → optional embedding selector → read. Requires a configured embedding model. |
+| A fragment whose circumstances matter | **Context:** read or expand nearby lines; during/around explores a time neighborhood. |
+| Curiosity, an analogy or inspiration | **Explore:** start with a loose question, follow a promising fragment into its neighbors, and say what connection you see. |
 
-## The recall tools (MCP)
+For copyable recipes, prerequisites and limits, read
+[search profiles](references/search-profiles.md). Start with an ordinary word search when that
+is enough; these are alternatives, not a mandatory ladder. A selector can only choose among
+its supplied candidates. An empty lexical search cannot be repaired by ranking that empty set.
 
-The descriptions below cover the legacy MCP mode. For the `--sources` mode, its presets
-and composable operations, see [OPERATIONS.md](OPERATIONS.md#configured-sources-through-operations).
-For a new connection to selected existing data, follow [CONNECT.md](../CONNECT.md).
+## Use the connected tools
 
-`recent` is a ribbon by day: Claude and Codex sessions split into days of activity (first and
-last human turn, last reply, topics if written), commits of the repositories found, changed
-project memory and notes. `search` looks for words across all these sources at once; findings
-where more distinct words matched come first. With `root` it searches one folder, including
-archived process folders. `read` opens a place by the address from a `read:` line or
-`repository@revision`.
+If `operation_catalog` is available, inspect it for source aliases, operations and parameter
+schemas. In configured-source mode, `search`, `read`, `recent`, `during` and `around` are
+convenience recipes; `operation_run` composes steps inside one call. State `characters` explicitly.
+Start with `view="first_look"` for orientation or `"passages"` to read text with evidence.
+Intermediate records stay inside the recipe; the output budget does not limit their size.
 
-Legacy sources are plugins listed in `scripts/sources.json` (or the file named by `RECALL_CONFIG`):
-`sessions` (transcript corpora), `memory` (Claude project memory), `notes` (Markdown folders),
-`git` (discovered and explicitly listed repositories). A plugin is a `Plugin(Source)` class from
-`recall_core.py`, placed in `scripts/plugins/` or given as a path to any `.py`; it yields findings
-with time, address and a place for bounds, while time windows, the answer budget, bounds and
-loud failures stay in the core. `test_recall_core.py` shows a third-party source.
+With only legacy `recent`, `search` and `read`, use those directly and their exposed schemas.
+Legacy `search` matches words across connected sources; `root` targets a folder.
+Open the returned `read:` address with `read`. Custom selectors and expansion profiles require
+the operation API. Do not assume a particular MCP server name or optional plugin is installed.
 
-`topics.py` writes topics for session days with a local model through Ollama: only topics and
-line numbers, each topic grounded in the lines it cites, stored next to the corpus and marked
-with the model and date. A day is cut into stretches so its middle gets a voice. Treat topics as
-leads for search and read, never as decisions.
+Read outcomes and coverage as well as findings: an unavailable or stale archive is different
+from no match. On an unhelpful result, try source vocabulary, another source or a different
+scope. `during` uses an explicit past interval; `recent` is relative to now. For conversation
+corpora and long-term retention, see [archive notes](references/conversation-traces.md).
 
-## Bounds
+Keep the evidence or path that lets a finding be reopened. A match or high similarity is a
+lead; read enough to distinguish the original words from your interpretation. If a neighboring
+fragment changes the question, follow it when useful. Say what caught you in an indirect
+connection, and leave uncertainty when nothing settles it.
 
-A folder containing `humans.txt` is a personal space. For sessions outside it everything inside
-is hidden: sessions opened there, those projects' memory, commits, files. The owner opens parts
-with a section in the same file; paths are relative to the folder:
+## Access and setup
 
-```
-[recall]
-open = play/, notes/
-private = private/
-guests = agents/
-```
+A folder containing `humans.txt` is a personal space. Read its owner's boundary before
+searching or quoting it. Its `[recall]` section uses relative paths: `open` exposes paths,
+`private` stays closed even within an open part, and `guests` treats residents of those
+subfolders as neighbors. Do not use another reader or a shell path to bypass a closed source.
 
-`open` is what neighbours may see (`.` is the whole folder), `private` stays closed even inside
-an open part, `guests` makes residents of those subfolders read as neighbours. The reader is the
-session's working folder (`RECALL_READER` overrides it). The rules file itself is always
-readable. Hidden things do not go silent: the first line of an answer names the space and its
-rules file. Spaces are searched under `spaces` in the config.
+For a new connection, use the repository's
+[connection guide](https://github.com/cog-astra/memory-happens/blob/main/CONNECT.md).
+Detailed operation contracts and optional plugin setup are in
+[OPERATIONS.md](https://github.com/cog-astra/memory-happens/blob/main/recall-traces/OPERATIONS.md).
+A missing tool is a setup limitation, not evidence that the past event did not happen.
 
-## By hand
+## Feedback makes this beta useful
 
-For a path that disappeared: `git -C FOLDER log --all -- PATH`, then `git show REVISION:PATH`;
-for a known file there is `scripts/memory_trail.py --help`. `scripts/recall_files.py --source`
-reads a window of a file under a root; its windowed search needs a memlab backend, which is not
-part of this repository (set `RECALL_MEMLAB`). `--describe` on either script prints its options
-as JSON.
+Helpful discoveries matter as much as failures. A short report is enough:
 
-Earlier conversations live in local Codex and Claude Code corpora:
-[how the archives are built and whose traces they hold](references/conversation-traces.md).
-Choosing the archive is part of the search; not finding an episode in a project folder says
-nothing about the conversation.
+- What were you trying to remember or explore?
+- Which profile, connected source types and version did you use, if known?
+- What helped, surprised, missed or cost too much? What would you try next?
 
-Keep the path and place that let a finding be unfolded again. Someone else's text stays their
-testimony: separate the quote from your interpretation, and not finding from not having
-happened. When the budget runs out, name the remaining uncertainty; a search does not have to
-become a full review.
+Feedback is optional and need not interrupt the user's task. With existing authorization to
+post, check for a related issue and report directly in the
+[issue tracker](https://github.com/cog-astra/memory-happens/issues). Otherwise leave the
+observation for the user. Use general task descriptions and minimal synthetic examples;
+do not publish private excerpts, personal paths, project details or credentials.
 
-## Improve recall
-
-Development and issue tracking: https://github.com/cog-astra/memory-happens (currently private).
-With repository access and authorization to collaborate, report an observation or proposal there
-directly; a patch is optional. Check existing issues and use synthetic examples instead of private
-traces. For changes, work in a repository checkout and follow CONTRIBUTING.md; the installed skill
-is a consumer. Do not require the human to relay a report between sessions.
-
-When results are empty or useless, you may ask the human you work with about a similar
-episode, briefly saying what you searched and where. A hint helps check where the thing got
-lost; "I don't remember either" leaves the uncertainty. The answer is not required to finish
-the current pass: keep the question and carry on.
+For a patch, work in a repository checkout and follow
+[CONTRIBUTING.md](https://github.com/cog-astra/memory-happens/blob/main/CONTRIBUTING.md);
+the installed skill is a consumer. No automatic telemetry or feedback submission is implied.
