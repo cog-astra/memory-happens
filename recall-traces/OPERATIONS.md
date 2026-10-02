@@ -2,7 +2,7 @@
 
 The executable slice is experimental. It does not replace the default MCP API.
 The public Python types live in `scripts/recall_operations.py`; plugins import those types,
-not runner internals. Version `0.1` is provisional; two selectors are exercised by the tests.
+not runner internals. Version `0.1` is provisional; selectors are exercised by the tests.
 
 A plugin object (including a Python module) supplies `catalog() -> iterable[Operation]` and
 `invoke(operation, parameters, inputs, context) -> iterator[Passage | Outcome]`.
@@ -249,3 +249,53 @@ selection; `lines` bounds each window's line count, not its characters or total 
 The final `characters` budget does not bound intermediate text. `test_source_operations`
 checks old and deep text, selector replacement, evidence readback and access filtering on
 synthetic notes and session projections.
+
+## Optional Ollama embedding selection
+
+`plugins.ollama_embed` is a candidate selector for custom recipes. Its synthetic endpoint tests
+check transport, cosine ranking and passage preservation; usefulness on real recall tasks is
+not established by those tests. Configuration requires an already available embedding model:
+
+```json
+{"operations": [{"name": "semantic", "module": "plugins.ollama_embed",
+  "options": {"model": "your-installed-embedding-model", "endpoint": "http://127.0.0.1:11434",
+              "batch_size": 32, "timeout": 60, "query_prefix": ""}}]}
+```
+
+In the preceding passages recipe, replace `fuzzy` with `semantic`. The operation contract stays
+`select(query, limit=5)` over `passages`. The plugin sends only the query and passage text to the
+configured endpoint, calls `/api/embed` with `truncate=false`, and returns the highest cosine
+scores in descending order. Ties retain input order. There is no relevance threshold: even
+unrelated inputs can occupy the top positions. Selected text, evidence and context are copied
+unchanged; runner access and conservative lineage still apply.
+
+Every invocation embeds the query and **all supplied passages again**, even when only one
+result is requested. There is no cache, index, source scan, automatic model download or model
+installation. For N passages fitting the byte bound, the call makes one query request plus
+`ceil(N / batch_size)` corpus requests. Byte splitting can increase that count. Materializing
+source passages and repeated embedding can be expensive; `limit` only bounds returned records.
+`query_prefix` is prepended exactly to the query alone. Configure the chosen model's required
+query format explicitly; the plugin does not infer it from the model name.
+
+The endpoint defaults to `http://127.0.0.1:11434`. Explicit HTTP(S) endpoints may be remote, so
+their configuration authorizes sending the supplied text there. Credentials, query strings and
+fragments in the URL are rejected. Redirects and environment proxies are disabled. Endpoint,
+model and prefix cannot be supplied through operation parameters or passage metadata.
+
+Configuration bounds are `batch_size` 1–256 (default 32), `max_batch_bytes` 1–67,108,864
+(default 1,048,576, counting the encoded JSON request), `max_response_bytes` 1–67,108,864
+(default 8,388,608 per response), and `timeout` greater than 0 and at most 900 seconds
+(default 60). A passage or prefixed query too large for one request fails before HTTP;
+the plugin does not truncate or split an individual passage. Server context refusals,
+unavailable models, unavailable servers, timeouts, oversized responses and malformed vectors
+produce distinct failure outcomes before any selected passage is emitted. Vector validation
+requires matching counts, consistent nonempty dimensions and finite nonzero vectors.
+
+The invocation shares a deadline across batches and checks cancellation before and after
+blocking HTTP operations. A silent server can delay cancellation until the current socket
+wait times out; an in-flight wait may finish after the shared deadline. No later batch starts
+after cancellation is observed. The MCP cancellation limitation described above still applies.
+
+Run `python -m unittest test_ollama_embed` from `recall-traces/scripts` for synthetic endpoint,
+runner and fresh stdio catalog/invoke checks, including an outage after a successful call.
+These checks require no Ollama server or downloaded model and do not measure embedding quality.
