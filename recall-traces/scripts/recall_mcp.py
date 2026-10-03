@@ -18,7 +18,7 @@ Before reconstructing the past by hand (git log, reading jsonl, grepping files),
 - a found place → read.
 A word match is a lead, not proof. The freshest trace is not necessarily the main thread: look a few days back before choosing.
 When answering from findings, say what you read and what stayed uncovered.
-Development: https://github.com/cog-astra/memory-happens (currently private). With repository access and authorization to collaborate, report observations or proposals directly in issues, using synthetic examples rather than private traces. Changes go through PRs; see CONTRIBUTING.md in the repository."""
+Development: https://github.com/cog-astra/memory-happens. With authorization to collaborate, report observations or proposals directly in issues, using synthetic examples rather than private traces. Changes go through PRs; see CONTRIBUTING.md in the repository."""
 
 GROUP_SHOWN = 8
 

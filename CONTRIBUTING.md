@@ -2,7 +2,7 @@
 
 Use English for code, documentation, reports, tests, commit messages and attribution.
 Keep reports small enough to act on. Use synthetic examples instead of personal conversations,
-credentials or machine-specific configuration, even while this repository is private.
+credentials or machine-specific configuration.
 
 ## Report or propose
 
