@@ -158,6 +158,15 @@ the folder reader searches text files and relocated archives. Empty results are 
 from missing sources or incomplete coverage. Session archive warnings are retained in outcomes.
 The internal source-collection recipe can include more than ten configured sources.
 
+Source and folder `search` split words on whitespace and match any case-insensitive
+substring. They do not parse Boolean expressions or quoted phrases. Compound queries
+containing standalone uppercase `AND`, `OR` or `NOT`, and terms beginning with double
+quotes (straight or curly), return `unsupported/unsupported_query_syntax` without searching.
+Legacy search returns the same explanation as text. Use unquoted words for candidate
+retrieval and read them to check phrases or exclusions; lowercase `and`, `or`, `not`
+remain literal words. This diagnostic does not parse every possible query language;
+selectors have their own query contracts.
+
 When `where` excludes accessible matching records, each source search outcome names their
 count and suggests dropping `where`. Inspect the source outcomes in `steps` for aggregate
 searches. Counts stay within the connected source, date filter and optional folder root;

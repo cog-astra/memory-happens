@@ -10,6 +10,7 @@ from plugins import git as git_source, memory as memory_source, notes as notes_s
 from recall_bounds import within
 from recall_core import REPO_REV, mentions, modified
 from recall_operations import AccessDenied, Evidence, Operation, Outcome, Passage, Value
+from recall_query import DESCRIPTION, RECOVERY, syntax_problem
 from recall_time import TimeWindow
 
 FOLDER_PATTERNS = ('*.md', '*.txt', '*.json')
@@ -44,7 +45,7 @@ class Around(Value):
 
 
 class Search(Value):
-    query: str = Field(min_length=1)
+    query: str = Field(min_length=1, description=DESCRIPTION)
     days: int | None = Field(default=None, ge=1)
     where: str | None = None
     limit: int | None = Field(default=None, ge=1)
@@ -79,6 +80,12 @@ def since_of(days):
 
 def words_of(query):
     return list(dict.fromkeys(word.casefold() for word in query.split()))
+
+
+def query_error(query):
+    if problem := syntax_problem(query):
+        return Outcome(status='unsupported', code='unsupported_query_syntax', message=problem, next_steps=[RECOVERY])
+    return None
 
 
 def hides_path(bounds, path):
@@ -351,6 +358,9 @@ class Plugin:
                         observed_at=iso(modified(path)) if path is not None else None)
 
     def invoke(self, operation, parameters, inputs, context):
+        if operation == 'search' and (error := query_error(parameters['query'])):
+            yield error
+            return
         if self.source is None:
             yield Outcome(status='unsupported', code='unknown_source_type',
                           message=f"No operation adapter for source type {self.kind!r}.")
@@ -550,6 +560,9 @@ class FolderPlugin:
     def invoke(self, operation, parameters, inputs, context):
         if operation == 'read':
             yield from self.read(parameters, context)
+            return
+        if error := query_error(parameters['query']):
+            yield error
             return
         words, since = words_of(parameters['query']), since_of(parameters['days'])
         if not words:

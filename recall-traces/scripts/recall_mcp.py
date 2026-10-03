@@ -8,6 +8,7 @@ from pydantic import Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from recall_core import Recall
+from recall_query import DESCRIPTION, RECOVERY, syntax_problem
 
 INSTRUCTIONS = """\
 Memory here is not a store but an assembly of traces for the current intent: Claude and Codex session transcripts across all projects, project memory, notes, git.
@@ -148,15 +149,17 @@ def create_server():
         since = datetime.now(timezone.utc) - timedelta(days=days)
         return preface(recall) + render_recent(recall.recent(since, where), characters)
 
-    @server.tool(structured_output=False, description='Search words across all sources at once: Claude and Codex sessions, project memory, notes, commit messages. Words match as case-insensitive substrings, so a stem catches every form. With root, search only that folder (including archived process folders).')
+    @server.tool(structured_output=False, description='Search words across all sources at once: Claude and Codex sessions, project memory, notes, commit messages. ' + DESCRIPTION + ' With root, search only that folder (including archived process folders).')
     def search(
-        query: Annotated[str, Field(description='Words separated by spaces; a stem catches every form')],
+        query: Annotated[str, Field(description=DESCRIPTION)],
         days: Annotated[int | None, Field(description='Only traces from the last N days', ge=1)] = None,
         where: Annotated[str | None, Field(description='Part of a project, repository or note path')] = None,
         root: Annotated[str | None, Field(description='Search only this folder instead of the configured sources')] = None,
         limit: Annotated[int, Field(description='Findings per source', ge=1)] = 8,
         characters: Annotated[int, Field(description='Answer length limit in Unicode characters, not tokens', ge=500)] = 8000,
     ) -> str:
+        if problem := syntax_problem(query):
+            return f'Unsupported query syntax: {problem}\n{RECOVERY}\n'
         recall = Recall()
         words = list(dict.fromkeys(word.casefold() for word in query.split()))
         if not words:

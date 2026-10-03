@@ -16,7 +16,9 @@ from recall_core import load_config
 from recall_operations import Operation, Outcome, Value
 from recall_recipe import run
 from recall_runner import Runner
+from recall_query import DESCRIPTION
 from recall_time import TimeWindow
+from source_operations import query_error
 
 
 INSTRUCTIONS = '''Recall across connected sources. Start with recent or search, then read the returned evidence.
@@ -205,9 +207,9 @@ def create_server(config_path, reader=None, selector='plugins.select_literal'):
                                          next_steps=['Give an ISO time with an explicit timezone offset and positive seconds within the datetime range.']), characters)
         return during(**interval.parameters(), characters=characters, where=where, limit=limit, view=view)
 
-    @server.tool(description='Search connected sessions, memory, notes and Git. With root, search that folder and its relocated archives. Findings carry evidence for read.')
+    @server.tool(description='Search connected sessions, memory, notes and Git. ' + DESCRIPTION + ' With root, search that folder and its relocated archives. Findings carry evidence for read.')
     def search(
-        query: str,
+        query: Annotated[str, Field(description=DESCRIPTION)],
         characters: Annotated[int, Field(ge=1)],
         days: Annotated[int | None, Field(ge=1)] = None,
         where: str | None = None,
@@ -215,6 +217,8 @@ def create_server(config_path, reader=None, selector='plugins.select_literal'):
         limit: Annotated[int, Field(ge=1)] = 8,
         view: Literal['first_look', 'passages', 'records'] = 'first_look',
     ) -> CallToolResult:
+        if error := query_error(query):
+            return reply([], [], error, characters, view)
         configuration = configured()
         parameters = {'query': query, 'days': days, 'where': where}
         steps = ([{'name': 'folder', 'plugin': 'folder', 'operation': 'search',
