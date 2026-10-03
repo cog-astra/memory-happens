@@ -10,6 +10,6 @@ RECOVERY = ('Use unquoted words separated by spaces, then read findings to check
 def syntax_problem(query):
     words = query.split()
     if (len(words) > 1 and any(word in {'AND', 'OR', 'NOT'} for word in words)
-            or re.search(r'(?:^|\s)["“]|["”](?=\s|$)', query)):
+            or re.search(r'(?:^|\s)["“]', query)):
         return 'Boolean operators and quoted phrases are not supported. No search was performed. ' + DESCRIPTION
     return None

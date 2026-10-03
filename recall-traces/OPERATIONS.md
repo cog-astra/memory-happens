@@ -160,7 +160,7 @@ The internal source-collection recipe can include more than ten configured sourc
 
 Source and folder `search` split words on whitespace and match any case-insensitive
 substring. They do not parse Boolean expressions or quoted phrases. Compound queries
-containing standalone uppercase `AND`, `OR` or `NOT`, and terms with boundary double
+containing standalone uppercase `AND`, `OR` or `NOT`, and terms beginning with double
 quotes (straight or curly), return `unsupported/unsupported_query_syntax` without searching.
 Legacy search returns the same explanation as text. Use unquoted words for candidate
 retrieval and read them to check phrases or exclusions; lowercase `and`, `or`, `not`

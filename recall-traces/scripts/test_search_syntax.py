@@ -14,7 +14,7 @@ class SearchSyntaxTest(unittest.IsolatedAsyncioTestCase):
             with self.subTest(query=query):
                 self.assertIsNotNone(syntax_problem(query))
         for query in ('', 'alpha beta', 'this or that', 'and', 'OR', 'ordinary',
-                      "don't forget", 'симкарт', 'operand ORacle'):
+                      "don't forget", 'симкарт', 'operand ORacle', '12"', 'name="value"'):
             with self.subTest(query=query):
                 self.assertIsNone(syntax_problem(query))
 
