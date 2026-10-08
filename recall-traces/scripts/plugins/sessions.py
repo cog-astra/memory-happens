@@ -199,7 +199,8 @@ class Plugin(Source):
                 state = json.loads(status.read_text(encoding='utf-8'))
                 checked = datetime.fromisoformat(state['checked_at'])
                 if now - checked > STALE:
-                    yield f"archive {corpus.parent} not updated since {checked.astimezone():%Y-%m-%d %H:%M} — fresh sessions are missing{fix}"
+                    yield (f"archive {corpus.parent} last checked at {checked.isoformat(timespec='minutes')}; "
+                           f"current coverage is unverified — recent sessions may be missing{fix}")
                 if state.get('errors'):
                     yield f"archive {corpus.parent}: {len(state['errors'])} errors on the last pass — listed in {status}"
             live = newest(store['live'], '*.jsonl') if store.get('live') and Path(store['live']).is_dir() else None
