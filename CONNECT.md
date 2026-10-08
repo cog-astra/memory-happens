@@ -100,9 +100,20 @@ including raw copies, `sessions-corpus`, manifests and any revisions. A copy alo
 logs does not protect against losing that disk. Keep the configured corpus path available to recall,
 or update it if you restore the archive elsewhere.
 
-Automatic refresh is optional; the Windows `install-*-archive.ps1` scripts create scheduled tasks and
-need separate consideration of their configured paths. Do not schedule them during this first
-connection.
+Automatic refresh is optional. Do not schedule it during this first connection. Once chosen,
+the Windows installers require the same source and destination as the verified export:
+
+```powershell
+& <scripts>/install-claude-archive.ps1 -Source <raw-projects> -Destination <archive>
+& <scripts>/install-codex-archive.ps1 -Source <raw-codex> -Destination <archive>
+```
+
+Run only the installer for the selected client. It replaces that client's scheduled task and
+starts an export immediately. Quote paths containing spaces. The task stores absolute paths;
+changes to the archiver's defaults do not redirect it. Keep `corpus` pointing to
+`<archive>/sessions-corpus`. Reinstall with the new paths if you move the source or archive;
+the installer does not read or update the recall configuration. Running it without both
+arguments fails before changing any task.
 
 ## Register the configured server
 

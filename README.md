@@ -80,8 +80,8 @@ Optional parts:
   to its checkout. Without it five tests are skipped and `--source` reading still works.
 - `topics.py` needs a local model served by Ollama.
 - `install-claude-archive.ps1` and `install-codex-archive.ps1` register Windows scheduled tasks.
-  The archivers write to `~/recall-archive/claude` and `~/recall-archive/codex` unless given
-  `--destination`.
+  They require explicit `-Source` and `-Destination` paths matching the connected corpus;
+  see [automatic refresh](CONNECT.md#keep-sessions-searchable-over-time).
 - Output limits such as `characters` count Unicode characters, not tokens.
 
 ## Origins
