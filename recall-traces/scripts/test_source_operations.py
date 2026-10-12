@@ -146,6 +146,29 @@ class SourceOperationsTest(unittest.TestCase):
         cfg = {'spaces': [str(self.base / 'spaces')], 'sources': list(self.options.values())}
         return dict(Recall(cfg, reader=str(self.outsider)).search(words))
 
+    def test_session_scope_accepts_either_path_separator(self):
+        cfg = {'spaces': [str(self.base / 'spaces')], 'sources': [self.options['sessions']]}
+        for project, scope in ((r'X:\Demo\harbour', 'x:/demo/harbour'),
+                               ('X:/Demo/harbour', r'x:\demo\harbour')):
+            with self.subTest(project=project, scope=scope):
+                self.claude.write_text(claude('claude', project,
+                    (DAY1, 0, 'user', 'The lighthouse keeper has the answer.')), encoding='utf-8')
+                legacy = Recall(cfg, reader=str(self.outsider))
+                hits = dict(legacy.search(['lighthouse'], where=scope))['sessions']
+                self.assertEqual([hit['where'] for hit in hits], [project])
+                recent = legacy.recent(DAY1 - timedelta(days=1), where=scope)
+                self.assertEqual([hit['where'] for hit in recent], [project])
+                runner = self.runner()
+                for operation, parameters in (
+                    ('search', {'query': 'lighthouse', 'where': scope}),
+                    ('during', {'start': (DAY1 - timedelta(days=1)).isoformat(),
+                                'end': NOW.isoformat(), 'where': scope}),
+                ):
+                    records, outcome = self.run_op(runner, 'sessions', operation, parameters)
+                    self.assertEqual(outcome['status'], 'success')
+                    self.assertEqual(len(records), 1)
+                    self.assertIn(str(self.claude), records[0]['evidence'][0]['locator'])
+
     def test_search_finds_the_known_places_and_the_same_places_as_legacy(self):
         runner = self.runner()
         expected = {'sessions': {f'{self.claude} start={line_of(self.claude, "paint the lighthouse")}',

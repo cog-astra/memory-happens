@@ -33,7 +33,7 @@ def modified(path):
 
 
 def mentions(text, where):
-    return not where or where.casefold() in str(text).casefold()
+    return not where or where.replace('\\', '/').casefold() in str(text).replace('\\', '/').casefold()
 
 
 def scan(path, words, stamp=None):
