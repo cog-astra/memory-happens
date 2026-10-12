@@ -122,12 +122,14 @@ def hit_block(hit, words):
     return head + f"  line {hit['line']} | {around(hit['excerpt'], words)}{tail}\n" + read
 
 
-def render_search(found, words, limit, characters):
+def render_search(found, words, limit, characters, *, outside_where=()):
+    hint = ('[matching records outside where: ' + ', '.join(f'{title}: {count}' for title, count in outside_where)
+            + '; search without where for a broader scope]\n') if outside_where else ''
     blocks = [f"### {title}: {len(hits)}\n" + ''.join(hit_block(hit, words) for hit in hits[:limit]) + '\n'
               for title, hits in found if hits]
     if not blocks:
-        return 'Nothing found. Try other words, synonyms or word stems; no finding does not mean it never happened.\n'
-    return fit(blocks, characters, lambda rest: f"[sources beyond characters: {rest}; raise characters or lower limit]\n")
+        return hint + 'Nothing found. Try other words, synonyms or word stems; no finding does not mean it never happened.\n'
+    return hint + fit(blocks, characters - len(hint), lambda rest: f"[sources beyond characters: {rest}; raise characters or lower limit]\n")
 
 
 def preface(recall):
@@ -172,7 +174,8 @@ def create_server():
                 return recall.bounds.refusal(root, space)
             return recall.bounds.notice() + render_search(recall.search_folder(root, words), words, limit, characters)
         since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
-        return preface(recall) + render_search(recall.search(words, since, where), words, limit, characters)
+        found, outside = recall.search_with_scope(words, since, where)
+        return preface(recall) + render_search(found, words, limit, characters, outside_where=outside)
 
     @server.tool(structured_output=False, description='Read a found place: a file path (session, note, memory) with a line number, or repository@revision for a commit.')
     def read(
