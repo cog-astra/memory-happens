@@ -69,10 +69,8 @@ cd recall-traces/scripts
 
 Here `<python>` is the isolated environment from BOOTSTRAP; tests need Git on PATH.
 Running a stdio server in a terminal does not connect it to a client.
-The legacy mode (no mode flag) remains available for existing installations. Its known
-mixed-commit and junction-alias filtering gaps are tracked in
-[issue #38](https://github.com/cog-astra/memory-happens/issues/38); do not rely on it to separate
-closed spaces from guests. New setups should follow CONNECT.
+The legacy mode (no mode flag) remains available for existing installations.
+New setups should follow CONNECT.
 
 Optional parts:
 
