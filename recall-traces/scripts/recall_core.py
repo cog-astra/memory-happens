@@ -141,13 +141,24 @@ class Recall:
         return sorted(found, key=lambda trace: trace['time'], reverse=True)
 
     def search(self, words, since=None, where=None):
-        found = []
+        return self.search_with_scope(words, since, where)[0]
+
+    def search_with_scope(self, words, since=None, where=None):
+        found, outside_where = [], []
         for plugin in self.plugins:
-            hits = [hit for hit in plugin.search(words, since)
-                    if (not since or hit['time'] >= since) and mentions(hit['where'], where) and self.visible(hit['bound'])]
+            hits, outside = [], 0
+            for hit in plugin.search(words, since):
+                if (since and hit['time'] < since) or not self.visible(hit['bound']):
+                    continue
+                if mentions(hit['where'], where):
+                    hits.append(hit)
+                else:
+                    outside += 1
             hits.sort(key=lambda hit: (len(hit['matched']), hit['total'], hit['time']), reverse=True)
             found.append((plugin.title, hits))
-        return found
+            if outside:
+                outside_where.append((plugin.title, outside))
+        return found, outside_where
 
     def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json')):
         from plugins.notes import Plugin as Folder

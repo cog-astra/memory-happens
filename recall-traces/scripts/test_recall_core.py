@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -173,6 +174,24 @@ class RecallTest(unittest.TestCase):
         self.assertTrue(found['git'] and found['project memory'])
         self.assertIn('[co-author: Claude Opus 5.5]', found['git'][0]['excerpt'])
         self.assert_locators_read(recall, recall_mcp.render_search(recall.search(['garden']), ['garden'], 8, 50000))
+
+    def test_search_scope_counts_only_accessible_records_in_the_time_window(self):
+        recall = self.recall(sources=[self.cfg['sources'][0]])
+        plugin = recall.plugins[0]
+        for since, where, expected in (
+            (None, str(self.work), 2),
+            (None, 'no-such-place', 4),
+            (datetime(2026, 9, 21, tzinfo=timezone.utc), str(self.work), 1),
+            (None, str(self.base), 0),
+            (None, None, 0),
+        ):
+            with self.subTest(since=since, where=where):
+                previous = recall.search(['garden', 'fence'], since, where)
+                with patch.object(plugin, 'search', wraps=plugin.search) as search:
+                    found, outside = recall.search_with_scope(['garden', 'fence'], since, where)
+                self.assertEqual(found, previous)
+                self.assertEqual(outside, [('sessions', expected)] if expected else [])
+                search.assert_called_once()
 
     def test_read_continues_where_it_stopped_and_accepts_the_whole_read_line(self):
         recall = self.recall()
