@@ -1,11 +1,16 @@
 # memory-happens
 
-Memory assembled from traces for the task at hand.
+Your work already leaves a memory.
 
-An experimental recall tool for AI-assisted work: find a past conversation, decision,
-change or unresolved question without asking the human to reconstruct it each time.
-The implementation provides MCP tools for recent activity, search and reading sources.
-Finding a matching passage is a lead; it does not establish the meaning of a decision.
+Conversations, notes and Git history contain things you did not know you would need
+to remember. memory-happens is an experimental MCP tool that reads those existing
+traces. You do not have to decide which facts deserve a separate memory entry before
+you can look for them later.
+
+The source record is the reference point. Search, context expansion and optional
+model processing offer different ways to read it; a generated summary does not replace
+it. Findings carry addresses so you can reopen the source and check an interpretation.
+Records can be incomplete, and a matching passage does not establish what a decision means.
 
 **See it first.** [Walk through a recorded synthetic recall](https://cog-astra.github.io/memory-happens/) in your browser; no installation required.
 Or [reopen a past conversation and handover note](https://cog-astra.github.io/memory-happens/sessions.html), including a search that misses both.
