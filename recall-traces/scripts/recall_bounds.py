@@ -66,8 +66,12 @@ def spaces(bases):
 
 
 def owns(space, reader):
-    inside = lambda path: within(reader, path) or resolved_within(reader, path)
-    return inside(space['root']) and not any(inside(guest) for guest in space['guests'])
+    if not (within(reader, space['root']) or resolved_within(reader, space['root'])):
+        return False
+    reader = Path(os.path.abspath(reader))
+    route = (reader, *reader.parents)
+    return not any(within(reader, guest) or any(resolved_within(part, guest) for part in route)
+                   for guest in space['guests'])
 
 
 class Bounds:

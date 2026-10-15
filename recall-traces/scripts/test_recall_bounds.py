@@ -120,6 +120,22 @@ class NestedBoundsTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 Bounds([self.home], reader=str(self.outsider))
 
+    def test_guest_route_cannot_reenter_owner_through_a_link(self):
+        root = self.space('owner', '[recall]\nopen = open\nguests = guests\n')
+        guests = root / 'guests'
+        guests.mkdir()
+        alias = self.base / 'alias'
+        self.link(alias, root)
+        self.link(guests / 'back', root)
+        for policy_root in (root, alias):
+            cfg = {'spaces': [str(policy_root)], 'sources': []}
+            for reader in (guests, guests / 'back', alias / 'guests/back'):
+                with self.subTest(policy=policy_root, reader=reader):
+                    recall = Recall(cfg, reader=str(reader))
+                    for route in (root, alias):
+                        self.assertTrue(recall.read(str(route / 'closed/note.md')).startswith('Closed:'))
+                        self.assertIn('OPEN boundarycanary', recall.read(str(route / 'open/note.md')))
+
 
 if __name__ == '__main__':
     unittest.main()
