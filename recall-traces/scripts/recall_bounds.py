@@ -46,14 +46,32 @@ def closes(space, path, inside):
 def spaces(bases):
     found = {}
     for base in map(Path, bases):
-        for pattern in (RULES, f'*/{RULES}', f'*/*/{RULES}'):
-            for rules in base.glob(pattern):
-                found[norm(rules)] = parse(rules)
+        if not base.is_dir():
+            continue
+        pending = [(base, frozenset())]
+        while pending:
+            directory, parents = pending.pop()
+            identity = norm(directory.resolve())
+            if identity in parents:
+                continue
+            ancestors = parents | {identity}
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    path = Path(entry.path)
+                    if os.path.normcase(entry.name) == os.path.normcase(RULES):
+                        found[norm(path)] = parse(path)
+                    elif entry.is_dir():
+                        pending.append((path, ancestors))
     return list(found.values())
 
 
 def owns(space, reader):
-    return within(reader, space['root']) and not any(within(reader, guest) for guest in space['guests'])
+    if not (within(reader, space['root']) or resolved_within(reader, space['root'])):
+        return False
+    reader = Path(os.path.abspath(reader))
+    route = (reader, *reader.parents)
+    return not any(within(reader, guest) or any(resolved_within(part, guest) for part in route)
+                   for guest in space['guests'])
 
 
 class Bounds:
