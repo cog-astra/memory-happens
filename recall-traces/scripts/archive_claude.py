@@ -7,8 +7,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from archive_codex import atomic_write, digest, exclusive
 from claude_transcript import message_blocks
+from session_projection import escape_message_text
 
-PROJECTION_VERSION = 3
+PROJECTION_VERSION = 4
 
 
 def project(data, raw_path, relative):
@@ -26,7 +27,7 @@ def project(data, raw_path, relative):
         for message in message_blocks(record, number):
             body.extend([
                 f'## {message["recorded_at"] or ""} [{message["role"]}] '
-                f'L{number}:B{message["block"]}', '', message['text'], '',
+                f'L{number}:B{message["block"]}', '', escape_message_text(message['text']), '',
             ])
             count += 1
     head.extend(f'{key}: {value}' for key, value in meta.items())

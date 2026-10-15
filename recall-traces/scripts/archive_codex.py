@@ -10,9 +10,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from codex_transcript import message_blocks
+from session_projection import escape_message_text
 
 
-PROJECTION_VERSION = 2
+PROJECTION_VERSION = 3
 
 
 @contextmanager
@@ -78,7 +79,7 @@ def project(data, raw_path):
         for message in message_blocks(record, number):
             lines.extend([
                 f'## {message["recorded_at"] or ""} [{message["role"]}] '
-                f'L{number}:B{message["block"]}', '', message['text'], '',
+                f'L{number}:B{message["block"]}', '', escape_message_text(message['text']), '',
             ])
             count += 1
     return '\n'.join(lines).encode('utf-8'), count, len(data) - complete
@@ -93,12 +94,14 @@ def archive(source, destination):
         raise FileNotFoundError('No Codex session directories found')
     manifest_path = destination / 'manifest.json'
     manifest = json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path.exists() else {}
-    report = {'checked_at': datetime.now(timezone.utc).isoformat(), 'copied': 0, 'unchanged': 0,
+    report = {'checked_at': datetime.now(timezone.utc).isoformat(), 'copied': 0, 'projected': 0, 'unchanged': 0,
               'deferred_tail_bytes': 0, 'errors': []}
+    seen = set()
     for root in roots:
         for path in sorted(root.rglob('*.jsonl')):
             relative = path.relative_to(source)
             key = relative.as_posix()
+            seen.add(key)
             target = destination / 'raw' / relative
             corpus = destination / 'sessions-corpus' / relative.with_suffix('.md')
             try:
@@ -129,6 +132,25 @@ def archive(source, destination):
                 report['deferred_tail_bytes'] += tail
             except (OSError, ValueError) as error:
                 report['errors'].append({'file': key, 'error': str(error)})
+    for target in sorted((destination / 'raw').rglob('*.jsonl')):
+        relative = target.relative_to(destination / 'raw')
+        key = relative.as_posix()
+        if key in seen:
+            continue
+        corpus = destination / 'sessions-corpus' / relative.with_suffix('.md')
+        entry = manifest.get(key, {})
+        if corpus.exists() and entry.get('projection_version') == PROJECTION_VERSION:
+            continue
+        try:
+            data = target.read_bytes()
+            rendered, count, tail = project(data, target)
+            atomic_write(corpus, rendered)
+            manifest[key] = {**entry, 'sha256': digest(data), 'projection_version': PROJECTION_VERSION,
+                             'messages': count, 'deferred_tail_bytes': tail}
+            report['projected'] += 1
+            report['deferred_tail_bytes'] += tail
+        except (OSError, ValueError) as error:
+            report['errors'].append({'file': key, 'error': str(error)})
     report['archived_files'] = len(manifest)
     atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2).encode('utf-8'))
     atomic_write(destination / 'status.json', json.dumps(report, ensure_ascii=False, indent=2).encode('utf-8'))

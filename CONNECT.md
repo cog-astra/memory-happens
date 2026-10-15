@@ -95,6 +95,11 @@ Before cleaning up original session logs, export them and verify a known passage
 Already exported copies and their searchable projections remain when original logs are deleted.
 Conversations deleted before the first successful export cannot be recovered by this archive.
 
+After updating the archiver, repeat the same export command to rebuild outdated projections
+from retained raw copies, including sessions whose live files were removed. Header-shaped lines
+inside message text are Markdown-escaped in the projection so they cannot create extra turns;
+raw JSONL copies remain unchanged. Updating MCP alone does not repair an older projection.
+
 Include the entire `<archive>` directory in your regular backup to a separate storage location,
 including raw copies, `sessions-corpus`, manifests and any revisions. A copy alongside the live
 logs does not protect against losing that disk. Keep the configured corpus path available to recall,
