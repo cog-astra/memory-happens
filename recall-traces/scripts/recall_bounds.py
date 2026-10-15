@@ -46,9 +46,22 @@ def closes(space, path, inside):
 def spaces(bases):
     found = {}
     for base in map(Path, bases):
-        for pattern in (RULES, f'*/{RULES}', f'*/*/{RULES}'):
-            for rules in base.glob(pattern):
-                found[norm(rules)] = parse(rules)
+        if not base.is_dir():
+            continue
+        pending = [(base, frozenset())]
+        while pending:
+            directory, parents = pending.pop()
+            identity = norm(directory.resolve())
+            if identity in parents:
+                continue
+            ancestors = parents | {identity}
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    path = Path(entry.path)
+                    if os.path.normcase(entry.name) == os.path.normcase(RULES):
+                        found[norm(path)] = parse(path)
+                    elif entry.is_dir():
+                        pending.append((path, ancestors))
     return list(found.values())
 
 
