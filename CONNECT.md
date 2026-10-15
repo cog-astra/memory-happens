@@ -51,9 +51,10 @@ when migrating an installation. They are cooperative filtering, not a sandbox. C
 material the user has authorized the calling agent to read.
 
 Within each configured `spaces` root, `humans.txt` discovery is recursive, including directory
-aliases; links back to an ancestor are not traversed again. Keep these roots limited to the
-spaces you need checked. An unreadable directory or rules file stops discovery with an error
-instead of silently leaving that subtree unchecked.
+aliases; links back to an ancestor are not traversed again. Different aliases to the same
+directory are still checked separately, so heavily linked trees can be expensive. Keep these
+roots limited to the spaces you need checked. An unreadable directory or rules file stops
+discovery with an error instead of silently leaving that subtree unchecked.
 
 ### Raw Claude or Codex sessions: first export
 

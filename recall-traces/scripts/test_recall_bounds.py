@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from recall_bounds import Bounds, slug, spaces
@@ -81,6 +82,43 @@ class NestedBoundsTests(unittest.TestCase):
         self.assertTrue(bounds.hides(root / 'closed/note.md'))
         self.assertTrue(bounds.hides(alias / 'team/people/bob/closed/note.md'))
         self.assertFalse(bounds.hides(root / 'open/note.md'))
+
+    def test_aliases_preserve_owner_and_guest_access(self):
+        root = self.space('owner', '[recall]\nopen = open\nguests = guests\n')
+        (root / 'guests').mkdir()
+        parent = self.home / 'elsewhere/one/two'
+        parent.mkdir(parents=True)
+        alias = parent / 'owner_alias'
+        self.link(alias, root)
+        guest_alias = self.base / 'guest_alias'
+        self.link(guest_alias, root / 'guests')
+        cfg = {'spaces': [str(self.home)], 'sources': []}
+        for reader in (root, alias):
+            with self.subTest(owner=reader):
+                recall = Recall(cfg, reader=str(reader))
+                for route in (root, alias):
+                    self.assertIn('CLOSED boundarycanary', recall.read(str(route / 'closed/note.md')))
+                    self.assertFalse(recall.bounds.hides_project(slug(route / 'closed')))
+        for reader in (root / 'guests', alias / 'guests', guest_alias, self.outsider):
+            with self.subTest(guest=reader):
+                recall = Recall(cfg, reader=str(reader))
+                for route in (root, alias):
+                    self.assertTrue(recall.read(str(route / 'closed/note.md')).startswith('Closed:'))
+                    self.assertIn('OPEN boundarycanary', recall.read(str(route / 'open/note.md')))
+                    self.assertTrue(recall.bounds.hides_project(slug(route / 'closed')))
+
+    def test_unreadable_subtree_does_not_silently_omit_rules(self):
+        root = self.space('one/two/three', '[recall]\nopen =\n')
+        scandir = os.scandir
+
+        def denied(path):
+            if Path(path) == root:
+                raise PermissionError('synthetic unreadable subtree')
+            return scandir(path)
+
+        with patch('recall_bounds.os.scandir', denied):
+            with self.assertRaises(PermissionError):
+                Bounds([self.home], reader=str(self.outsider))
 
 
 if __name__ == '__main__':
