@@ -14,8 +14,8 @@ FOUND = {}
 
 def git(repo, *args):
     result = subprocess.run(['git', '-C', str(repo), *args], capture_output=True,
-                            text=True, encoding='utf-8', errors='replace')
-    return result.stdout if result.returncode == 0 else ''
+                            text=True, encoding='utf-8', errors='replace', check=True)
+    return result.stdout
 
 
 def discover(root, depth=3):
@@ -42,7 +42,7 @@ def commits(repo, since=None, words=(), full=False, window=None):
     if since and window is None:
         args.append(f'--since={since.isoformat()}')
     if words:
-        args += ['-i', *[f'--grep={word}' for word in words]]
+        args += ['-i', '--fixed-strings', *[f'--grep={word}' for word in words]]
     found = {}
     for record in git(repo, *args).split('\x1e')[1:]:
         head, _, names = record.partition('\x00')
