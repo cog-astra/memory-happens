@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import shlex
 import sys
 from datetime import datetime, timedelta, timezone
@@ -8,8 +7,8 @@ from pathlib import Path
 
 from claude_transcript import TOOL_PREFIX
 from recall_core import Source, modified, scan
+from session_projection import MESSAGE
 
-MESSAGE = re.compile(r'^## (\d{4}-\d{2}-\d{2}T[\d:.]+Z) \[(user|assistant)\] L\d+:B\d+$')
 SERVICE_PREFIXES = ('<', '# AGENTS.md', '[Request interrupted')
 AUTOMATED_ORIGINS = ('subagent', 'sdk-cli')
 STALE = timedelta(hours=1)
