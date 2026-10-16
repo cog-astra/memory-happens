@@ -9,6 +9,7 @@ from pathlib import Path
 
 import recall_archive
 from recall_bounds import Bounds
+from recall_ranking import relevance
 
 CONFIG = Path(os.environ.get('RECALL_CONFIG') or Path(__file__).with_name('sources.json'))
 REPO_REV = re.compile(r'^(.*)@([0-9a-fA-F]{6,40})$')
@@ -154,7 +155,7 @@ class Recall:
                     hits.append(hit)
                 else:
                     outside += 1
-            hits.sort(key=lambda hit: (len(hit['matched']), hit['total'], hit['time']), reverse=True)
+            hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
             found.append((plugin.title, hits))
             if outside:
                 outside_where.append((plugin.title, outside))
@@ -165,7 +166,7 @@ class Recall:
         folder = Folder({'roots': [str(path) for path in recall_archive.search_roots(root)], 'patterns': list(patterns)})
         folder.title = f'folder {root}'
         hits = [hit for hit in folder.search(words, None) if self.visible(hit['bound'])]
-        hits.sort(key=lambda hit: (len(hit['matched']), hit['total'], hit['time']), reverse=True)
+        hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
         return [(folder.title, hits)]
 
     def health(self, now=None):
