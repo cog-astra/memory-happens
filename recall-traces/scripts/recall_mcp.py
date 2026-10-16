@@ -125,11 +125,31 @@ def hit_block(hit, words):
 def render_search(found, words, limit, characters, *, outside_where=()):
     hint = ('[matching records outside where: ' + ', '.join(f'{title}: {count}' for title, count in outside_where)
             + '; search without where for a broader scope]\n') if outside_where else ''
-    blocks = [f"### {title}: {len(hits)}\n" + ''.join(hit_block(hit, words) for hit in hits[:limit]) + '\n'
-              for title, hits in found if hits]
-    if not blocks:
+    groups = [(title, hits) for title, hits in found if hits]
+    if not groups:
         return hint + 'Nothing found. Try other words, synonyms or word stems; no finding does not mean it never happened.\n'
-    return hint + fit(blocks, characters - len(hint), lambda rest: f"[sources beyond characters: {rest}; raise characters or lower limit]\n")
+    selected = [[] for _ in groups]
+    headers = [f"### {title}: {len(hits)}\n" for title, hits in groups]
+
+    def omitted():
+        counts = [f'{line(title, 60)}: {len(hits) - len(shown)}'
+                  for (title, hits), shown in zip(groups, selected) if len(shown) < len(hits)]
+        return (f"[not shown: {line(', '.join(counts), 220)}; raise characters or limit]\n" if counts else '')
+
+    used = len(hint)
+    for rank in range(min(limit, max(len(hits) for _, hits in groups))):
+        for index, (_, hits) in enumerate(groups):
+            if rank >= len(hits):
+                continue
+            block = hit_block(hits[rank], words)
+            extra = len(block) + (len(headers[index]) + 1 if not selected[index] else 0)
+            selected[index].append(block)
+            if used + extra + len(omitted()) <= characters:
+                used += extra
+            else:
+                selected[index].pop()
+    return hint + ''.join(header + ''.join(shown) + '\n'
+                          for header, shown in zip(headers, selected) if shown) + omitted()
 
 
 def preface(recall):
