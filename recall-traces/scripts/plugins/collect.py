@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pydantic import Field
 
 from recall_operations import Operation, Outcome, Value, passage
+from recall_ranking import relevance
 
 
 class Parameters(Value):
@@ -30,8 +31,8 @@ class Plugin:
 
     def invoke(self, operation, parameters, inputs, context):
         records = [record for batch in inputs.values() for record in batch]
-        key = moment if parameters['order'] == 'recent' else lambda record: (
-            len(record.context.get('matched', [])), record.context.get('total', 0), moment(record))
+        key = moment if parameters['order'] == 'recent' else lambda record: relevance(
+            record.context.get('matched', []), record.context.get('total', 0), moment(record), record.text)
         records.sort(key=key, reverse=True)
         counts, emitted = {}, 0
         for record in records:

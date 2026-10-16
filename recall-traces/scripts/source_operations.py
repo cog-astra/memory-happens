@@ -11,6 +11,7 @@ from recall_bounds import within
 from recall_core import REPO_REV, mentions, modified
 from recall_operations import AccessDenied, Evidence, Operation, Outcome, Passage, Value
 from recall_query import DESCRIPTION, RECOVERY, syntax_problem
+from recall_ranking import relevance
 from recall_time import TimeWindow
 
 FOLDER_PATTERNS = ('*.md', '*.txt', '*.json')
@@ -102,7 +103,7 @@ def hidden(bounds, bound):
 
 
 def ranked(hits, limit):
-    hits.sort(key=lambda hit: (len(hit['matched']), hit['total'], hit['time']), reverse=True)
+    hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
     return hits[:limit] if limit else hits
 
 

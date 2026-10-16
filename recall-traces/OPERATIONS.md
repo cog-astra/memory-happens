@@ -153,10 +153,16 @@ For example, `around(time="2026-04-08T10:00:00Z", seconds=600, characters=8000)`
 
 `recent` accepts `days`, `where`, `limit` and
 `view`; `search` adds `query` and optional `root`. Without `root`, source search results are
-ranked by matched words, occurrences and time, with `limit` applied per source. With `root`,
+ranked by distinct matched words, then how many of those words occur together on one
+excerpt line, then occurrences and time, with `limit` applied per source. With `root`,
 the folder reader searches text files and relocated archives. Empty results are distinct
 from missing sources or incomplete coverage. Session archive warnings are retained in outcomes.
 The internal source-collection recipe can include more than ten configured sources.
+
+Legacy search, folder search and `collect(order='relevance')` use the same ordering.
+The excerpt-line tie-break measures co-occurrence on a physical line, not semantic relevance
+or word distance. Different line wrapping can change it. It does not equate word forms
+or written numbers with digits; document-wide word coverage remains the primary key.
 
 Source and folder `search` split words on whitespace and match any case-insensitive
 substring. They do not parse Boolean expressions or quoted phrases. Compound queries
