@@ -55,6 +55,15 @@ class SearchRankingTest(unittest.TestCase):
                 {'matched': ['rare-id', 'expiry'], 'total': 2, 'time': 1, 'excerpt': 'rare-id', 'name': 'complete'}]
         self.assertEqual(ranked(hits, None)[0]['name'], 'complete')
 
+    def test_collection_accepts_records_without_text(self):
+        original = Record(id='empty', lineage=Lineage(invocation='fixture', inputs=[]))
+        events = list(Runner({'combine': Collect(['hits'])}).invoke(
+            'combine', 'collect', {'order': 'relevance'}, {'hits': [original]}))
+        found = [event['record'] for event in events if event['type'] == 'record']
+        self.assertEqual(len(found), 1)
+        self.assertIsNone(found[0]['text'])
+        self.assertEqual(events[-1]['outcome']['status'], 'success')
+
     def test_locality_ties_keep_occurrences_then_time_and_stable_order(self):
         hits = [{'matched': ['bolt'], 'total': total, 'time': time, 'excerpt': 'BOLT', 'name': name}
                 for name, total, time in [('old', 3, 1), ('new', 3, 2), ('same', 3, 2), ('few', 2, 3)]]
