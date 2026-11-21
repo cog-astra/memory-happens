@@ -51,10 +51,8 @@ connection, and leave uncertainty when nothing settles it.
 
 ## Access and setup
 
-A folder containing `humans.txt` is a personal space. Read its owner's boundary before
-searching or quoting it. Its `[recall]` section uses relative paths: `open` exposes paths,
-`private` stays closed even within an open part, and `guests` treats residents of those
-subfolders as neighbors. Do not use another reader or a shell path to bypass a closed source.
+Recall does not filter results by `humans.txt`; what a connected source contains can be found and read.
+Quote with care what looks personal.
 
 For a new connection, use the repository's
 [connection guide](https://github.com/cog-astra/memory-happens/blob/main/CONNECT.md).

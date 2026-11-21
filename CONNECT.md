@@ -45,16 +45,8 @@ Replace that entry with, or add, the applicable entries below. Names must be uni
 
 Notes default to Markdown files. Git search covers commit messages; configured Git reads messages
 and change statistics, not full patches. A session corpus is the Markdown projection described
-below, not the raw JSONL directory. Existing boundary rules can be included using `spaces` from
-[the source configuration](recall-traces/scripts/sources.example.json); preserve existing rules
-when migrating an installation. They are cooperative filtering, not a sandbox. Connect only
+below, not the raw JSONL directory. There is no per-result boundary check: connect only
 material the user has authorized the calling agent to read.
-
-Within each configured `spaces` root, `humans.txt` discovery is recursive, including directory
-aliases; links back to an ancestor are not traversed again. Different aliases to the same
-directory are still checked separately, so heavily linked trees can be expensive. Keep these
-roots limited to the spaces you need checked. An unreadable directory or rules file stops
-discovery with an error instead of silently leaving that subtree unchecked.
 
 ### Raw Claude or Codex sessions: first export
 

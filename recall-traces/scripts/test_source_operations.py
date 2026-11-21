@@ -9,11 +9,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import recall_bounds
+from test_support import slug
 import source_operations
 import trigram_selector
 from plugins import select_literal
-from recall_bounds import Bounds
 from recall_core import Recall
 from recall_recipe import run as run_recipe
 from recall_runner import Runner
@@ -65,9 +64,6 @@ class SourceOperationsTest(unittest.TestCase):
         self.work = base / 'work'
         self.friend = base / 'spaces' / 'friend'
         (self.friend / 'open').mkdir(parents=True)
-        (self.friend / 'closed').mkdir()
-        (self.friend / 'humans.txt').write_text('[recall]\nopen = open\n', encoding='utf-8')
-        self.outsider = base / 'elsewhere'
 
         self.corpus = base / 'archive' / 'corpus'
         sessions = self.corpus / 'C--Work'
@@ -87,25 +83,19 @@ class SourceOperationsTest(unittest.TestCase):
                                     (DAY2, 30, 'user', 'Check the harbour crane near the lighthouse'),
                                     (DAY2, 31, 'assistant', 'The crane is fine.'),
                                     (DAY2, 32, 'user', 'Good, close it')), encoding='utf-8')
-        self.secret = sessions / 'secret.md'
-        self.secret.write_text(claude('secret', self.friend / 'closed',
-                                      (DAY2, 40, 'user', 'A private lighthouse plan'),
-                                      (DAY2, 41, 'user', 'Keep it quiet')), encoding='utf-8')
         self.shared = sessions / 'shared.md'
         self.shared.write_text(claude('shared', self.friend / 'open',
                                       (DAY2, 50, 'user', 'An open lighthouse sketch'),
                                       (DAY2, 51, 'user', 'Share it')), encoding='utf-8')
 
         projects = base / 'projects'
-        for project, name, text in ((self.work, 'lighthouse', 'The lighthouse is blue.'),
-                                    (self.friend / 'closed', 'secret', 'The private lighthouse key.')):
-            memory = projects / recall_bounds.slug(project) / 'memory'
+        for project, name, text in ((self.work, 'lighthouse', 'The lighthouse is blue.'),):
+            memory = projects / slug(project) / 'memory'
             memory.mkdir(parents=True)
             (memory / 'MEMORY.md').write_text('- index\n', encoding='utf-8')
             (memory / f'{name}.md').write_text(f'---\nname: {name}\ndescription: "About {name}"\n---\n\n{text}\n',
                                                encoding='utf-8')
-        self.memory_note = projects / recall_bounds.slug(self.work) / 'memory' / 'lighthouse.md'
-        self.memory_secret = projects / recall_bounds.slug(self.friend / 'closed') / 'memory' / 'secret.md'
+        self.memory_note = projects / slug(self.work) / 'memory' / 'lighthouse.md'
 
         vault = base / 'vault'
         (vault / 'Places').mkdir(parents=True)
@@ -120,21 +110,17 @@ class SourceOperationsTest(unittest.TestCase):
         self.painted = commit(self.work, {'paint.txt': 'blue'}, 'Paint the lighthouse blue')
         commit(self.work, {'crane.txt': 'ok'}, 'Inspect the harbour crane')
         self.opened = commit(self.friend, {'open/a.txt': '1'}, 'Open lighthouse sketch')
-        self.private = commit(self.friend, {'closed/b.txt': '2'}, 'Private lighthouse plan')
-        self.mixed = commit(self.friend, {'open/a.txt': '3', 'closed/b.txt': '4'}, 'Mixed lighthouse change')
 
         self.options = {
             'sessions': {'plugin': 'sessions', 'stores': [{'corpus': str(self.corpus), 'archiver': 'archive_claude.py'}]},
             'memory': {'plugin': 'memory', 'roots': [str(projects)]},
             'notes': {'plugin': 'notes', 'roots': [str(vault)]},
             'git': {'plugin': 'git', 'repos': [str(self.work)], 'discover': [str(base / 'spaces')]}}
-        self.bounds = Bounds([str(base / 'spaces')], str(self.outsider))
 
     def runner(self, **replaced):
         options = {**self.options, **replaced}
-        places = source_operations.Places(self.bounds, list(options.values()))
-        plugins = {alias: source_operations.Plugin(alias, entry, places) for alias, entry in options.items()}
-        plugins['folder'] = source_operations.FolderPlugin('folder', places)
+        plugins = {alias: source_operations.Plugin(alias, entry) for alias, entry in options.items()}
+        plugins['folder'] = source_operations.FolderPlugin('folder')
         plugins['select'] = select_literal.Plugin()
         return Runner(plugins)
 
@@ -144,7 +130,7 @@ class SourceOperationsTest(unittest.TestCase):
 
     def legacy(self, words):
         cfg = {'spaces': [str(self.base / 'spaces')], 'sources': list(self.options.values())}
-        return dict(Recall(cfg, reader=str(self.outsider)).search(words))
+        return dict(Recall(cfg).search(words))
 
     def test_session_scope_accepts_either_path_separator(self):
         cfg = {'spaces': [str(self.base / 'spaces')], 'sources': [self.options['sessions']]}
@@ -153,7 +139,7 @@ class SourceOperationsTest(unittest.TestCase):
             with self.subTest(project=project, scope=scope):
                 self.claude.write_text(claude('claude', project,
                     (DAY1, 0, 'user', 'The lighthouse keeper has the answer.')), encoding='utf-8')
-                legacy = Recall(cfg, reader=str(self.outsider))
+                legacy = Recall(cfg)
                 hits = dict(legacy.search(['lighthouse'], where=scope))['sessions']
                 self.assertEqual([hit['where'] for hit in hits], [project])
                 recent = legacy.recent(DAY1 - timedelta(days=1), where=scope)
@@ -225,28 +211,6 @@ class SourceOperationsTest(unittest.TestCase):
             self.assertEqual(outcome['message'], '')
             self.assertEqual(outcome['next_steps'], [])
 
-    def test_outside_where_preserves_health_and_respects_policy_without_new_dependencies(self):
-        visible = self.friend / 'open' / 'visible.md'
-        visible.write_text('lighthouse', encoding='utf-8')
-        options = {**self.options['notes'], 'roots': [str(self.cape.parent.parent), str(self.friend)]}
-        runner = self.runner(notes=options)
-        records, outcome = self.run_op(runner, 'notes', 'search', {'query': 'lighthouse', 'where': 'Places'})
-        self.assertEqual(len(records), 1)
-        self.assertEqual(outcome['message'], 'Matching records outside where: 1.')
-        self.assertNotIn(visible.resolve().as_posix(), records[0]['access'])
-        runner.policy = lambda resources: visible.resolve().as_posix() not in resources
-        records, outcome = self.run_op(runner, 'notes', 'search', {'query': 'lighthouse', 'where': 'Places'})
-        self.assertEqual(len(records), 1)
-        self.assertEqual(outcome['message'], '')
-        missing = self.base / 'missing-notes'
-        options['roots'].append(str(missing))
-        _, outcome = self.run_op(self.runner(notes=options), 'notes', 'search',
-                                 {'query': 'lighthouse', 'where': 'Places'})
-        self.assertEqual(outcome['status'], 'partial')
-        self.assertEqual(outcome['code'], 'source_partial')
-        self.assertIn(str(missing), outcome['message'])
-        self.assertIn('Matching records outside where: 1.', outcome['message'])
-
     def test_folder_reports_only_visible_matches_inside_its_root(self):
         runner = self.runner()
         broad, _ = self.run_op(runner, 'folder', 'search', {'query': 'lighthouse', 'root': str(self.corpus)})
@@ -262,7 +226,7 @@ class SourceOperationsTest(unittest.TestCase):
         self.assertEqual(outcome['message'], '')
 
     def test_configured_exclusions_still_apply(self):
-        excluded = {**self.options['memory'], 'exclude': [recall_bounds.slug(self.work)]}
+        excluded = {**self.options['memory'], 'exclude': [slug(self.work)]}
         records, outcome = self.run_op(self.runner(memory=excluded), 'memory', 'search', {'query': 'blue'})
         self.assertEqual((records, outcome['status']), ([], 'success'))
 
@@ -296,30 +260,6 @@ class SourceOperationsTest(unittest.TestCase):
                     self.assertEqual(read[0]['text'], record['text'])
                     self.assertEqual(outcome['status'], 'success')
                     self.assertTrue(record['lineage']['inputs'])
-
-    def test_passages_reuse_boundaries_before_emitting_candidates(self):
-        open_note, closed_note = self.friend / 'open' / 'n.md', self.friend / 'closed' / 'n.md'
-        open_note.write_text('Open garden\n', encoding='utf-8')
-        closed_note.write_text('Closed garden\n', encoding='utf-8')
-        runner = self.runner(notes={'plugin': 'notes', 'roots': [str(self.friend), str(self.corpus)]})
-        runner.policy = lambda resources: not any(self.bounds.hides(r) for r in resources)
-        for alias, excluded in (('notes', (closed_note, self.secret)), ('sessions', (self.secret,))):
-            records, outcome = self.run_op(runner, alias, 'passages', {'lines': 2})
-            paths = {r['evidence'][0]['locator'].split(' start=')[0] for r in records}
-            self.assertTrue(paths)
-            self.assertFalse(paths.intersection(map(str, excluded)))
-            self.assertIn(str(self.shared), paths)
-            if alias == 'notes':
-                self.assertIn(str(open_note), paths)
-            self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
-            for record in records:
-                self.assertEqual(self.run_op(runner, alias, 'read', {'evidence': record['evidence'][0]})[1]['status'],
-                                 'success')
-            for path in excluded:
-                evidence = {'source': alias, 'locator': f'{path} start=1'}
-                self.assertEqual(self.run_op(runner, alias, 'read', {'evidence': evidence})[1]['code'], 'access_denied')
-        runner.policy = lambda resources: False
-        self.assertEqual(self.run_op(runner, 'sessions', 'passages')[1]['code'], 'access_denied')
 
     def test_passages_catalog_scope_validation_and_missing_source(self):
         runner = self.runner()
@@ -361,8 +301,7 @@ class SourceOperationsTest(unittest.TestCase):
         self.assertEqual(first['context']['topics']['topics'][0]['text'], 'lighthouse colour')
         self.assertIn("paint the lighthouse blue", first['text'])
         self.assertIn('And the railing too', first['text'])
-        self.assertEqual(outcome['status'], 'partial')
-        self.assertEqual(outcome['code'], 'policy_filtered')
+        self.assertEqual(outcome['status'], 'success')
         narrowed = self.run_op(self.runner(), 'sessions', 'recent', {'days': 7, 'where': 'friend'})[0]
         self.assertEqual({r['evidence'][0]['locator'].split(' start=')[0] for r in narrowed}, {str(self.shared)})
         ordered = [r['context']['event_time'] for r in records]
@@ -391,111 +330,6 @@ class SourceOperationsTest(unittest.TestCase):
         records, outcome = self.run_op(self.runner(), 'notes', 'read', {'evidence': carried})
         self.assertEqual((outcome['status'], outcome['code']), ('success', 'source_changed'))
         self.assertIn('Its keeper left.', records[0]['text'])
-
-    def test_closed_space_is_filtered_and_its_direct_reads_are_refused(self):
-        runner = self.runner()
-        for alias, hidden_place in (('sessions', str(self.secret)), ('memory', str(self.memory_secret))):
-            records, outcome = self.run_op(runner, alias, 'search', {'query': 'lighthouse'})
-            self.assertFalse(any(r['evidence'][0]['locator'].startswith(hidden_place) for r in records))
-            self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
-            forged = {'source': alias, 'locator': f'{hidden_place} start=1'}
-            refused = self.run_op(runner, alias, 'read', {'evidence': forged})
-            self.assertEqual((refused[0], refused[1]['code']), ([], 'access_denied'))
-        records, outcome = self.run_op(runner, 'git', 'search', {'query': 'lighthouse'})
-        revisions = {r['evidence'][0]['revision'] for r in records}
-        self.assertIn(self.opened, revisions)
-        self.assertNotIn(self.private, revisions)
-        self.assertNotIn(self.mixed, revisions)
-        self.assertIn('2 excluded', outcome['message'])
-        for revision in (self.private, self.mixed):
-            forged = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
-            self.assertEqual(self.run_op(runner, 'git', 'read', {'evidence': forged})[1]['code'], 'access_denied')
-        refused = self.run_op(runner, 'folder', 'search', {'query': 'lighthouse', 'root': str(self.friend / 'closed')})
-        self.assertEqual(refused[1]['code'], 'access_denied')
-
-    def test_a_closed_root_hides_its_items_without_refusing_the_open_ones(self):
-        (self.friend / 'open' / 'n.md').write_text('an open lighthouse note\n', encoding='utf-8')
-        (self.friend / 'closed' / 'n.md').write_text('a closed lighthouse note\n', encoding='utf-8')
-        options = {'notes': {'plugin': 'notes', 'roots': [str(self.base / 'vault'), str(self.friend)]},
-                   'git': {'plugin': 'git', 'repos': [str(self.work), str(self.friend)]}}
-        places = source_operations.Places(self.bounds, list(options.values()))
-        plugins = {alias: source_operations.Plugin(alias, entry, places) for alias, entry in options.items()}
-        runner = Runner(plugins, policy=lambda resources: not any(self.bounds.hides(r) for r in resources))
-        records, outcome = self.run_op(runner, 'notes', 'search', {'query': 'lighthouse'})
-        self.assertEqual({r['evidence'][0]['locator'].split(' start=')[0] for r in records},
-                         {str(self.cape), str(self.friend / 'open' / 'n.md')})
-        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
-        records, outcome = self.run_op(runner, 'git', 'search', {'query': 'lighthouse'})
-        self.assertEqual({r['evidence'][0]['revision'] for r in records}, {self.painted, self.opened})
-        self.assertEqual((outcome['status'], outcome['code']), ('partial', 'policy_filtered'))
-        fresh = Runner(plugins, policy=lambda resources: not any(self.bounds.hides(r) for r in resources))
-        for record in records:
-            carried = json.loads(json.dumps(record['evidence'][0]))
-            read, outcome = self.run_op(fresh, 'git', 'read', {'evidence': carried})
-            self.assertEqual(outcome['status'], 'success', carried['revision'])
-            self.assertIn(carried['revision'], read[0]['text'])
-        for revision in (self.private, self.mixed):
-            forged = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
-            self.assertEqual(self.run_op(fresh, 'git', 'read', {'evidence': forged})[1]['code'], 'access_denied')
-        notes = [r for r in self.run_op(runner, 'notes', 'search', {'query': 'lighthouse'})[0]]
-        for record in notes:
-            self.assertEqual(self.run_op(fresh, 'notes', 'read', {'evidence': record['evidence'][0]})[1]['status'], 'success')
-
-    def test_git_private_exception_in_an_open_repository(self):
-        (self.friend / 'humans.txt').write_text('[recall]\nopen = .\nprivate = closed/\n', encoding='utf-8')
-        self.bounds = Bounds([str(self.base / 'spaces')], str(self.outsider))
-        runner = self.runner()
-        records, outcome = self.run_op(runner, 'git', 'search', {'query': 'lighthouse'})
-        revisions = {record['evidence'][0]['revision'] for record in records}
-        self.assertEqual(revisions, {self.painted, self.opened})
-        self.assertEqual(outcome['code'], 'policy_filtered')
-        for revision in (self.private, self.mixed):
-            evidence = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
-            self.assertEqual(self.run_op(runner, 'git', 'read', {'evidence': evidence})[1]['code'], 'access_denied')
-
-    def test_git_read_checks_unicode_paths_and_both_merge_parents(self):
-        name = 'open/private file \u21161.txt'
-        private = commit(self.friend, {name: 'hidden'}, 'unicode_boundary_canary')
-        (self.friend / 'humans.txt').write_text(f'[recall]\nopen = .\nprivate = {name}, closed/\n', encoding='utf-8')
-        main = git(self.friend, 'branch', '--show-current')
-        git(self.friend, 'checkout', '-qb', 'side')
-        commit(self.friend, {'closed/side.txt': 'hidden'}, 'side update')
-        git(self.friend, 'checkout', main)
-        commit(self.friend, {'open/main.txt': 'public'}, 'main update')
-        git(self.friend, 'merge', '--no-ff', 'side', '-m', 'merge_boundary_canary')
-        merged = git(self.friend, 'rev-parse', 'HEAD')
-        self.bounds = Bounds([str(self.base / 'spaces')], str(self.outsider))
-        runner = self.runner()
-        for revision in (private, merged):
-            evidence = {'source': 'git', 'locator': f'{self.friend.as_posix()}@{revision}'}
-            self.assertEqual(self.run_op(runner, 'git', 'read', {'evidence': evidence})[1]['code'], 'access_denied')
-        records, _ = self.run_op(runner, 'git', 'search', {'query': 'boundary_canary'})
-        self.assertEqual(records, [])
-
-    def test_another_reader_cannot_open_what_a_source_owner_closes(self):
-        runner = self.runner()
-        for evidence in ({'source': 'folder', 'locator': f'{self.secret} start=1'},
-                         {'source': 'folder', 'locator': f'{self.memory_secret} start=1'}):
-            self.assertEqual(self.run_op(runner, 'folder', 'read', {'evidence': evidence})[1]['code'], 'access_denied')
-        records, outcome = self.run_op(runner, 'folder', 'search', {'query': 'lighthouse', 'root': str(self.corpus)})
-        places = {r['evidence'][0]['locator'].split(' start=')[0] for r in records}
-        self.assertNotIn(str(self.secret), places)
-        self.assertIn(str(self.shared), places)
-        self.assertEqual(outcome['code'], 'policy_filtered')
-        neighbour = {'source': 'folder', 'locator': f'{self.shared} start=1'}
-        self.assertEqual(self.run_op(runner, 'folder', 'read', {'evidence': neighbour})[1]['status'], 'success')
-        overlapping = self.runner(notes={'plugin': 'notes', 'roots': [str(self.corpus)]})
-        records = self.run_op(overlapping, 'notes', 'search', {'query': 'lighthouse'})[0]
-        places = {r['evidence'][0]['locator'].split(' start=')[0] for r in records}
-        self.assertEqual((str(self.secret) in places, str(self.shared) in places), (False, True))
-        forged = {'source': 'notes', 'locator': f'{self.secret} start=1'}
-        self.assertEqual(self.run_op(overlapping, 'notes', 'read', {'evidence': forged})[1]['code'], 'access_denied')
-
-    def test_a_denying_policy_refuses_the_whole_source(self):
-        places = source_operations.Places(self.bounds, [self.options['notes']])
-        plugins = {'notes': source_operations.Plugin('notes', self.options['notes'], places)}
-        outcome = self.run_op(Runner(plugins, policy=lambda resources: False), 'notes', 'search', {'query': 'lighthouse'})[1]
-        self.assertEqual((outcome['status'], outcome['code']), ('failed', 'access_denied'))
 
     def test_missing_and_partial_corpora_stay_visible_and_differ_from_empty(self):
         gone = str(self.base / 'gone')

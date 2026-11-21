@@ -92,9 +92,9 @@ class Plugin(Source):
                    'group': f"git · {repo.as_posix()}", 'headline': f"{commit['rev']} {commit['subject']}",
                    'locator': f"{repo.as_posix()}@{commit['rev']}"}
 
-    def search(self, words, since, where=None, searchable=lambda repo: True):
+    def search(self, words, since, where=None):
         found = [repo for repo in repos(self.options)
-                 if active(repo, since) and mentions(repo, where) and searchable(repo)]
+                 if active(repo, since) and mentions(repo, where)]
         found.sort(key=lambda repo: modified(repo / '.git' / 'logs' / 'HEAD') if (repo / '.git' / 'logs' / 'HEAD').is_file()
                    else modified(repo), reverse=True)
         for start in range(0, len(found), 8):

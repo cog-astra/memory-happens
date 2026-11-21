@@ -66,18 +66,6 @@ class ExpansionTest(unittest.TestCase):
         cancellation.set()
         self.assertEqual(expand(self.runner, [anchor(self.note)], cancelled=cancellation)[1]['status'], 'cancelled')
 
-    def test_inline_anchor_cannot_bypass_a_personal_boundary(self):
-        friend = self.root / 'spaces/friend'
-        friend.mkdir(parents=True)
-        (friend / 'humans.txt').write_text('[recall]\nopen = open\n', encoding='utf-8')
-        secret = friend / 'closed.md'
-        secret.write_text('private text', encoding='utf-8')
-        runner = Configuration({'spaces': [str(self.root / 'spaces')],
-                                'sources': [{'plugin': 'notes', 'roots': [str(friend)]}]}, reader=str(self.root / 'reader')).runner()
-        records, outcome = expand(runner, [anchor(secret)])
-        self.assertEqual(records, [])
-        self.assertEqual(outcome['code'], 'access_denied')
-
     def test_changed_source_is_reported_when_anchor_lines_disappear(self):
         records, outcome = expand(self.runner, [anchor(self.note, 100, 'gone', observed_at='2000-01-01T00:00:00Z')])
         self.assertEqual(records, [])

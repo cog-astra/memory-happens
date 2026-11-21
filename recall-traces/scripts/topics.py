@@ -109,7 +109,7 @@ def main():
     since = datetime.now(timezone.utc) - timedelta(days=args.days)
     for path in sessions.paths(since):
         fields = header(path)
-        if (args.only and args.only not in str(path)) or not recall.visible({'path': fields.get('project')}) \
+        if (args.only and args.only not in str(path)) \
                 or fields.get('origin', '').startswith(AUTOMATED_ORIGINS):
             continue
         known = json.loads(store(path).read_text(encoding='utf-8')) if store(path).is_file() else {}

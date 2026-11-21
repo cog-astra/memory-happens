@@ -74,11 +74,10 @@ class TimeWindowTest(unittest.TestCase):
             git(self.work, 'commit', '--amend', '--no-edit', '--date', DAY2.isoformat())
         self.assertEqual(self.run_op(self.runner(), 'git', 'during', parameters)[0], [])
 
-    def test_policy_missing_source_and_invalid_windows(self):
+    def test_missing_source_and_invalid_windows(self):
         interval = TimeWindow(DAY2, DAY2 + timedelta(hours=2))
         records, outcome = self.run_op(self.runner(), 'sessions', 'during', interval.parameters())
-        self.assertEqual(outcome['code'], 'policy_filtered')
-        self.assertNotIn('private lighthouse', json.dumps(records))
+        self.assertEqual(outcome['status'], 'success')
         self.assertTrue(any('open lighthouse' in r['text'] for r in records))
         absent = {'plugin': 'notes', 'roots': [str(self.base / 'missing')]}
         self.assertEqual(self.run_op(self.runner(notes=absent), 'notes', 'during', interval.parameters())[1]['status'], 'unavailable')
@@ -124,7 +123,7 @@ class TimeWindowTest(unittest.TestCase):
 class TimeWindowMCPTest(unittest.IsolatedAsyncioTestCase):
     async def test_historical_window_and_reopen_without_recent(self):
         with tempfile.TemporaryDirectory() as directory:
-            path, cfg, _, _ = fixture(Path(directory))
+            path, cfg, _ = fixture(Path(directory))
             corpus = Path(cfg['sources'][0]['stores'][0]['corpus'])
             (corpus / 'old.md').write_text(
                 '# Codex session old\nproject: fixture\norigin: cli\n\n'

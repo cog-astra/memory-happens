@@ -27,7 +27,7 @@ class TimeBudgetTest(unittest.TestCase):
         self.cfg = {'sources': [{'plugin': 'notes', 'roots': [str(self.notes)]}]}
 
     def recall(self):
-        return Recall(self.cfg, reader=str(self.base))
+        return Recall(self.cfg)
 
     def test_without_a_budget_nothing_changes(self):
         recall = self.recall()
@@ -66,13 +66,13 @@ class TimeBudgetTest(unittest.TestCase):
             original = module.Plugin.search
             module.Plugin.search = (lambda original: lambda self, *args: (ran.append(self.title), original(self, *args))[1])(original)
             self.addCleanup(setattr, module.Plugin, 'search', original)
-        found, _ = Recall(cfg, reader=str(self.base)).search_with_scope(['lanternword'], budget=60)
+        found, _ = Recall(cfg).search_with_scope(['lanternword'], budget=60)
         self.assertEqual(ran, ['notes', 'project memory'])
         self.assertEqual([title for title, _ in found], ['project memory', 'notes'])
 
     def test_a_source_that_is_off_is_reported_as_off_not_as_late(self):
         cfg = {'sources': [*self.cfg['sources'], {'plugin': 'git', 'repos': []}]}
-        recall = Recall(cfg, reader=str(self.base))
+        recall = Recall(cfg)
         recall.search_with_scope(['lanternword'], opt_in=False, budget=0)
         self.assertEqual(recall.skipped, ['git'])
         self.assertEqual(recall.unfinished, [('notes', 'not started')])

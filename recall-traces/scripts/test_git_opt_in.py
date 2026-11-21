@@ -33,11 +33,11 @@ class GitOptInTest(unittest.TestCase):
         return {title: len(hits) for title, hits in found}
 
     def test_library_default_still_searches_everything(self):
-        found, _ = Recall(self.cfg, reader=str(self.base)).search_with_scope(['lanternword'])
+        found, _ = Recall(self.cfg).search_with_scope(['lanternword'])
         self.assertEqual(self.titles(found), {'notes': 1, 'git': 2})
 
     def test_git_is_skipped_unless_asked_and_the_answer_says_so(self):
-        recall = Recall(self.cfg, reader=str(self.base))
+        recall = Recall(self.cfg)
         found, outside = recall.search_with_scope(['lanternword'], opt_in=False)
         self.assertEqual(self.titles(found), {'notes': 1})
         self.assertEqual(recall.skipped, ['git'])
@@ -48,27 +48,16 @@ class GitOptInTest(unittest.TestCase):
         self.assertIn('Nothing found', empty)
 
     def test_where_naming_a_repository_turns_git_on_for_it_alone(self):
-        recall = Recall(self.cfg, reader=str(self.base))
+        recall = Recall(self.cfg)
         found, _ = recall.search_with_scope(['lanternword'], where='alpha', opt_in=False)
         self.assertEqual(recall.skipped, [])
         self.assertEqual(self.titles(found)['git'], 1)
         self.assertIn('alpha', dict(found)['git'][0]['label'])
 
     def test_where_that_is_no_repository_does_not_turn_git_on(self):
-        recall = Recall(self.cfg, reader=str(self.base))
+        recall = Recall(self.cfg)
         recall.search_with_scope(['lanternword'], where='notes', opt_in=False)
         self.assertEqual(recall.skipped, ['git'])
-
-    def test_history_of_a_closed_space_is_not_walked(self):
-        (self.repos['beta'] / 'humans.txt').write_text('[recall]\nopen =\n', encoding='utf-8')
-        walked = []
-        original = git_source.commits
-        with patch.object(git_source, 'commits', lambda repo, *a, **k: (walked.append(repo.name), original(repo, *a, **k))[1]):
-            found, _ = Recall({**self.cfg, 'spaces': [str(self.base / 'code' / 'beta')]},
-                              reader=str(self.base)).search_with_scope(['lanternword'])
-        self.assertEqual(walked, ['alpha'])
-        self.assertEqual(self.titles(found)['git'], 1)
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -8,7 +8,6 @@ import unittest
 
 import archive_claude
 from plugins.sessions import Plugin
-from recall_bounds import Bounds
 from recall_runner import Runner
 import source_operations
 
@@ -83,8 +82,7 @@ class SessionHealthTest(unittest.TestCase):
                         self.assertTrue(any('the corpus at' in text for text in warnings))
                     else:
                         self.assertEqual(warnings, [])
-                    places = source_operations.Places(Bounds([], str(self.root)), [options])
-                    runner = Runner({'sessions': source_operations.Plugin('sessions', options, places)})
+                    runner = Runner({'sessions': source_operations.Plugin('sessions', options)})
                     events = list(runner.invoke('sessions', 'search', {'query': 'original'}))
                     self.assertEqual(len([e for e in events if e['type'] == 'record']), 1)
                     self.assertEqual(events[-1]['outcome']['status'], 'partial' if live else 'success')

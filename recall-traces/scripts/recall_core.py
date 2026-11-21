@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import recall_archive
-from recall_bounds import Bounds
 from recall_ranking import relevance
 
 CONFIG = Path(os.environ.get('RECALL_CONFIG') or Path(__file__).with_name('sources.json'))
@@ -137,33 +136,16 @@ def read_file(path, start, lines, characters):
 
 
 class Recall:
-    def __init__(self, cfg=None, reader=None):
+    def __init__(self, cfg=None):
         self.cfg = cfg if cfg is not None else load_config()
         self.plugins = load_plugins(self.cfg)
-        self.bounds = Bounds(self.cfg.get('spaces', []), reader)
         self.skipped = []
         self.unfinished = []
-
-    def space_of(self, bound):
-        if 'files' in bound:
-            if not bound['files']:
-                return self.bounds.owner_of(bound['repo'])
-            return next((space for path in bound['files'] if (space := self.bounds.owner_of_tracked(bound['repo'], path))), None)
-        if 'project' in bound:
-            return self.bounds.owner_of_project(bound['project'])
-        return self.bounds.owner_of(bound.get('path'))
-
-    def searchable(self, repo):
-        opened = self.bounds.open_paths(repo)
-        return opened is None or bool(opened)
-
-    def visible(self, bound):
-        return self.space_of(bound) is None
 
     def recent(self, since, where=None):
         found = [{**trace, 'source': plugin.name}
                  for plugin in self.plugins for trace in plugin.recent(since)
-                 if trace['time'] >= since and mentions(trace['where'], where) and self.visible(trace['bound'])]
+                 if trace['time'] >= since and mentions(trace['where'], where)]
         return sorted(found, key=lambda trace: trace['time'], reverse=True)
 
     def search(self, words, since=None, where=None):
@@ -185,11 +167,11 @@ class Recall:
                 continue
             plugin.deadline, plugin.stopped = deadline, None
             if plugin.opt_in:
-                stream = plugin.search(words, since, where, self.searchable)
+                stream = plugin.search(words, since, where)
             else:
                 stream = plugin.search(words, since)
             for hit in stream:
-                if (since and hit['time'] < since) or not self.visible(hit['bound']):
+                if since and hit['time'] < since:
                     continue
                 if mentions(hit['where'], where):
                     hits.append(hit)
@@ -207,7 +189,7 @@ class Recall:
         from plugins.notes import Plugin as Folder
         folder = Folder({'roots': [str(path) for path in recall_archive.search_roots(root)], 'patterns': list(patterns)})
         folder.title = f'folder {root}'
-        hits = [hit for hit in folder.search(words, None) if self.visible(hit['bound'])]
+        hits = list(folder.search(words, None))
         hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
         return [(folder.title, hits)]
 
@@ -218,13 +200,6 @@ class Recall:
     def read(self, target, start=1, lines=80, characters=6000):
         target, _, given = target.removeprefix('read: ').partition(' start=')
         start = int(given) if given.isdigit() else start
-        space = self.bounds.owner_of(target) if Path(target).is_file() else None
-        if space:
-            return self.bounds.refusal(target, space)
-        bound = next((b for plugin in self.plugins if (b := plugin.bound_of(target)) is not None), {'path': target})
-        space = self.space_of(bound)
-        if space:
-            return self.bounds.refusal(target, space)
         for plugin in self.plugins:
             text = plugin.read(target, start, lines, characters)
             if text is not None:
