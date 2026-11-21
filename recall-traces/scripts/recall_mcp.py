@@ -203,7 +203,9 @@ def create_server():
             space = recall.bounds.owner_of(root)
             if space:
                 return recall.bounds.refusal(root, space)
-            return recall.bounds.notice() + render_search(recall.search_folder(root, words), words, limit, characters)
+            found = recall.search_folder(root, words, budget=budget)
+            return recall.bounds.notice() + render_search(found, words, limit, characters,
+                                                         unfinished=recall.unfinished, budget=budget)
         since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
         found, outside = recall.search_with_scope(words, since, where, opt_in=git, budget=budget)
         return preface(recall) + render_search(found, words, limit, characters, outside_where=outside,
