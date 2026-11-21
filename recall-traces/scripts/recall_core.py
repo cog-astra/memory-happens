@@ -181,7 +181,7 @@ class Recall:
                 continue
             if deadline is not None and time.monotonic() >= deadline:
                 self.unfinished.append((plugin.title, 'not started'))
-                found[plugin.title] = []
+                found[id(plugin)] = []
                 continue
             plugin.deadline, plugin.stopped = deadline, None
             if plugin.opt_in:
@@ -196,12 +196,12 @@ class Recall:
                 else:
                     outside += 1
             hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
-            found[plugin.title] = hits
+            found[id(plugin)] = hits
             if getattr(plugin, 'stopped', None):
                 self.unfinished.append((plugin.title, plugin.stopped))
             if outside:
                 outside_where.append((plugin.title, outside))
-        return [(plugin.title, found[plugin.title]) for plugin in self.plugins if plugin.title in found], outside_where
+        return [(plugin.title, found[id(plugin)]) for plugin in self.plugins if id(plugin) in found], outside_where
 
     def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json')):
         from plugins.notes import Plugin as Folder

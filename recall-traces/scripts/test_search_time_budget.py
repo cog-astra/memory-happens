@@ -86,3 +86,17 @@ class TimeBudgetTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SameTitleSourcesTest(unittest.TestCase):
+    def test_two_sources_with_one_title_keep_their_own_findings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            for name in ('one', 'two'):
+                (base / name).mkdir()
+                (base / name / f'{name}.md').write_text('lanternword', encoding='utf-8')
+            cfg = {'sources': [{'plugin': 'notes', 'roots': [str(base / name)]} for name in ('one', 'two')]}
+            for budget in (None, 60):
+                found, _ = Recall(cfg, reader=str(base)).search_with_scope(['lanternword'], budget=budget)
+                labels = sorted(hit['label'] for _, hits in found for hit in hits)
+                self.assertEqual(labels, ['one.md', 'two.md'], budget)
