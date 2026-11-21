@@ -16,6 +16,7 @@ def frontmatter(text):
 
 class Plugin(Source):
     title = 'project memory'
+    cost = 2
 
     def paths(self, since=None):
         excluded = {project.casefold() for project in self.options.get('exclude', [])}
@@ -44,7 +45,7 @@ class Plugin(Source):
                    'locator': str(path)}
 
     def search(self, words, since):
-        for root, path in self.paths(since):
+        for root, path in self.newest(self.paths(since), lambda pair: pair[1]):
             project = path.parent.parent.name
             for hit in scan(path, words):
                 yield {**hit, 'time': modified(path), 'where': project, 'bound': {'project': project},

@@ -80,6 +80,7 @@ def across(found, work):
 class Plugin(Source):
     title = 'git'
     opt_in = True
+    cost = 9
 
     def covers(self, where):
         return bool(where) and any(mentions(repo, where) for repo in repos(self.options))
@@ -94,6 +95,15 @@ class Plugin(Source):
     def search(self, words, since, where=None, searchable=lambda repo: True):
         found = [repo for repo in repos(self.options)
                  if active(repo, since) and mentions(repo, where) and searchable(repo)]
+        found.sort(key=lambda repo: modified(repo / '.git' / 'logs' / 'HEAD') if (repo / '.git' / 'logs' / 'HEAD').is_file()
+                   else modified(repo), reverse=True)
+        for start in range(0, len(found), 8):
+            if self.expired():
+                self.stopped = f'{len(found) - start} of {len(found)} repositories, least recently active'
+                return
+            yield from self.search_repos(found[start:start + 8], since, words)
+
+    def search_repos(self, found, since, words):
         for repo, commit in across(found, lambda repo: commits(repo, since, words)):
             folded = commit['subject'].casefold()
             yield {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],

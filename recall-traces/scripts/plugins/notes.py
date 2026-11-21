@@ -13,6 +13,7 @@ def title(path):
 
 class Plugin(Source):
     title = 'notes'
+    cost = 1
 
     def paths(self, since=None):
         for root in map(Path, self.options.get('roots', [])):
@@ -40,7 +41,7 @@ class Plugin(Source):
                    'locator': str(path)}
 
     def search(self, words, since):
-        for root, path in self.paths(since):
+        for root, path in self.newest(self.paths(since), lambda pair: pair[1]):
             for hit in scan(path, words):
                 yield {**hit, 'time': modified(path), 'where': str(path), 'bound': {'path': path},
                        'label': path.relative_to(root).as_posix(), 'locator': f"{path} start={hit['line']}"}

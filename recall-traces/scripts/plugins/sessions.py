@@ -109,6 +109,7 @@ def clip(text, limit=220):
 
 class Plugin(Source):
     title = 'sessions'
+    cost = 5
 
     def __init__(self, options):
         super().__init__(options)
@@ -178,7 +179,7 @@ class Plugin(Source):
                 'locator': f"{path} start={humans[0]['line'] if humans else day[0]['line']}"}
 
     def search(self, words, since):
-        for path in self.paths(since):
+        for path in self.newest(self.paths(since)):
             fields = header(path)
             project = fields.get('project', '')
             for hit in scan(path, words, stamp):
