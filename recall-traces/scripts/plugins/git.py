@@ -18,26 +18,28 @@ def git(repo, *args):
     return result.stdout
 
 
-def discover(root, depth=3):
+def discover(root, depth=3, skipped=()):
     found = []
     for folder, children, _ in os.walk(root):
         level = len(Path(folder).relative_to(root).parts)
         if (Path(folder) / '.git').exists():
             found.append(Path(folder))
-        children[:] = [] if level >= depth else [c for c in children if c not in SKIP and not c.startswith('.')]
+        children[:] = [] if level >= depth else [c for c in children if c not in SKIP and not c.startswith('.')
+                                                   and not excluded(Path(folder) / c, skipped)]
     return found
 
 
 def repos(options, ttl=600):
-    key = tuple(options.get('discover', []))
+    skipped = tuple(options.get('exclude', []))
+    key = (tuple(options.get('discover', [])), skipped)
     if key not in FOUND or time.time() - FOUND[key][0] > ttl:
-        FOUND[key] = (time.time(), [repo for root in key if Path(root).is_dir() for repo in discover(root)])
+        FOUND[key] = (time.time(), [repo for root in key[0] if Path(root).is_dir() for repo in discover(root, skipped=skipped)])
     explicit = [Path(repo) for repo in options.get('repos', []) if (Path(repo) / '.git').exists()]
     return sorted(repo for repo in set(FOUND[key][1]) | set(explicit) if not excluded(repo, options.get('exclude', [])))
 
 
 def commits(repo, since=None, words=(), full=False, window=None):
-    args = ['log', '--branches', '-m', '--name-only', '-z',
+    args = ['log', '--branches', '-z',
             f"--format=%x1e{'%H' if full else '%h'}%x1f%aI%x1f%s%x1f%(trailers:key=Co-Authored-By,valueonly,separator=%x2C )"]
     if since and window is None:
         args.append(f'--since={since.isoformat()}')
@@ -45,18 +47,15 @@ def commits(repo, since=None, words=(), full=False, window=None):
         args += ['-i', '--fixed-strings', *[f'--grep={word}' for word in words]]
     found = {}
     for record in git(repo, *args).split('\x1e')[1:]:
-        head, _, names = record.partition('\x00')
-        files = names.removeprefix('\n').split('\x00')
+        head = record.partition('\x00')[0]
         rev, when, subject, partners = head.split('\x1f', 3)
         moment = datetime.fromisoformat(when)
         # Git's date filters use committer time; this stream exposes author time.
         if window is not None and not window.contains(moment):
             continue
         voices = ', '.join(name.split(' <')[0] for name in partners.split(', ') if name.strip())
-        entry = found.setdefault(rev, {'rev': rev, 'time': moment,
-                                 'subject': subject + (f" [co-author: {voices}]" if voices else ''),
-                                 'bound': {'repo': repo, 'files': []}})
-        entry['bound']['files'].extend(repo / name for name in files if name)
+        found.setdefault(rev, {'rev': rev, 'time': moment,
+                                 'subject': subject + (f" [co-author: {voices}]" if voices else '')})
     yield from found.values()
 
 
@@ -88,7 +87,7 @@ class Plugin(Source):
     def recent(self, since):
         found = [repo for repo in repos(self.options) if active(repo, since)]
         for repo, commit in across(found, lambda repo: commits(repo, since)):
-            yield {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],
+            yield {'time': commit['time'], 'where': str(repo),
                    'group': f"git · {repo.as_posix()}", 'headline': f"{commit['rev']} {commit['subject']}",
                    'locator': f"{repo.as_posix()}@{commit['rev']}"}
 
@@ -106,7 +105,7 @@ class Plugin(Source):
     def search_repos(self, found, since, words):
         for repo, commit in across(found, lambda repo: commits(repo, since, words)):
             folded = commit['subject'].casefold()
-            yield {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],
+            yield {'time': commit['time'], 'where': str(repo),
                    'matched': [word for word in words if word in folded], 'total': 1, 'places': [],
                    'excerpt': f"{commit['rev']} {commit['subject']}", 'label': repo.as_posix(),
                    'locator': f"{repo.as_posix()}@{commit['rev']}"}
@@ -115,12 +114,6 @@ class Plugin(Source):
         return [f"repository unavailable: {repo} — searching without it; set in sources.json"
                 for repo in self.options.get('repos', []) if not (Path(repo) / '.git').exists()]
 
-    def bound_of(self, target):
-        match = REPO_REV.match(target)
-        if not match or not Path(match[1]).is_dir():
-            return None
-        repo = Path(match[1])
-        return {'repo': repo, 'files': changed_paths(repo, match[2])}
 
     def read(self, target, start, lines, characters):
         match = REPO_REV.match(target)

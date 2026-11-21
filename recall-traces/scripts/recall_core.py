@@ -1,3 +1,4 @@
+import functools
 import importlib
 import importlib.util
 import itertools
@@ -33,10 +34,28 @@ def modified(path):
     return datetime.fromtimestamp(Path(path).stat().st_mtime, timezone.utc)
 
 
+@functools.lru_cache(maxsize=None)
+def real(path):
+    return os.path.normcase(os.path.realpath(str(path)))
+
+
 def excluded(path, roots):
-    path = os.path.normcase(os.path.abspath(str(path)))
-    return any(path == root or path.startswith(root.rstrip(os.sep) + os.sep)
-               for root in (os.path.normcase(os.path.abspath(str(root))) for root in roots))
+    path = real(path)
+    return any(path == root or path.startswith(root.rstrip(os.sep) + os.sep) for root in map(real, roots))
+
+
+def slug(path):
+    return re.sub(r'[^A-Za-z0-9]', '-', os.path.abspath(str(path))).casefold()
+
+
+def is_path(entry):
+    return any(mark in str(entry) for mark in ('/', '\\', ':'))
+
+
+def excluded_project(name, roots):
+    name = str(name).casefold()
+    return any(name == str(root).casefold() or (is_path(root) and (name == slug(root) or name.startswith(slug(root) + '-')))
+               for root in roots)
 
 
 def mentions(text, where):
@@ -102,9 +121,6 @@ class Source:
     def health(self, now):
         return []
 
-    def bound_of(self, target):
-        return None
-
     def read(self, target, start, lines, characters):
         return None
 
@@ -147,6 +163,8 @@ class Recall:
         self.plugins = load_plugins(self.cfg)
         self.skipped = []
         self.unfinished = []
+        self.excluded = len({real(root) if is_path(root) else str(root).casefold()
+                             for plugin in self.plugins for root in plugin.options.get('exclude', [])})
 
     def recent(self, since, where=None):
         found = [{**trace, 'source': plugin.name}
@@ -169,7 +187,7 @@ class Recall:
                 continue
             if deadline is not None and time.monotonic() >= deadline:
                 self.unfinished.append((plugin.title, 'not started'))
-                found[plugin.title] = []
+                found[id(plugin)] = []
                 continue
             plugin.deadline, plugin.stopped = deadline, None
             if plugin.opt_in:
@@ -184,18 +202,22 @@ class Recall:
                 else:
                     outside += 1
             hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
-            found[plugin.title] = hits
+            found[id(plugin)] = hits
             if getattr(plugin, 'stopped', None):
                 self.unfinished.append((plugin.title, plugin.stopped))
             if outside:
                 outside_where.append((plugin.title, outside))
-        return [(plugin.title, found[plugin.title]) for plugin in self.plugins if plugin.title in found], outside_where
+        return [(plugin.title, found[id(plugin)]) for plugin in self.plugins if id(plugin) in found], outside_where
 
-    def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json')):
+    def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json'), budget=None):
         from plugins.notes import Plugin as Folder
         folder = Folder({'roots': [str(path) for path in recall_archive.search_roots(root)], 'patterns': list(patterns)})
         folder.title = f'folder {root}'
+        self.unfinished = []
+        folder.deadline, folder.stopped = (None if budget is None else time.monotonic() + budget), None
         hits = list(folder.search(words, None))
+        if folder.stopped:
+            self.unfinished.append((folder.title, folder.stopped))
         hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
         return [(folder.title, hits)]
 

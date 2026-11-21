@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from claude_transcript import TOOL_PREFIX
-from recall_core import Source, modified, scan
+from recall_core import Source, excluded, modified, scan
 from session_projection import MESSAGE
 
 SERVICE_PREFIXES = ('<', '# AGENTS.md', '[Request interrupted')
@@ -120,8 +120,10 @@ class Plugin(Source):
         for store in self.stores:
             corpus = Path(store['corpus'])
             if corpus.is_dir():
+                skipped = self.options.get('exclude', [])
                 for path in corpus.rglob('*.md'):
-                    if 'subagents' not in path.parts and not (since and modified(path) < since):
+                    if 'subagents' not in path.parts and not (since and modified(path) < since) \
+                            and not (skipped and excluded(header(path).get('project', ''), skipped)):
                         yield path
 
     def human(self, message):
@@ -172,7 +174,7 @@ class Plugin(Source):
             listed = '; '.join(f"{topic['text']} L{topic['lines'][0]}" for topic in topics['topics'])
             quotes.insert(0, f"topics ({topics['model']}, {topics['made'][:10]}): {clip(listed, 600)}")
         automated = len(humans) < 2 or fields.get('origin', '').startswith(AUTOMATED_ORIGINS)
-        return {'time': day[-1]['time'], 'start': day[0]['time'], 'where': project, 'bound': {'path': project},
+        return {'time': day[-1]['time'], 'start': day[0]['time'], 'where': project,
                 'automated': automated, 'untitled': not automated and not topics,
                 'headline': f"{fields['agent']} · {project} · human turns: {len(humans)}{since}",
                 'quotes': quotes,
@@ -183,7 +185,7 @@ class Plugin(Source):
             fields = header(path)
             project = fields.get('project', '')
             for hit in scan(path, words, stamp):
-                yield {**hit, 'time': hit['said'] or modified(path), 'where': project, 'bound': {'path': project},
+                yield {**hit, 'time': hit['said'] or modified(path), 'where': project,
                        'label': f"{fields['agent']} · {project}", 'locator': f"{path} start={hit['line']}"}
 
     def health(self, now):
@@ -219,11 +221,3 @@ class Plugin(Source):
             if live and archived and live - archived > SILENT:
                 yield (f"archive {corpus.parent} is silent: a live session changed at {live.astimezone():%H:%M}, "
                        f"the {reference} at {archived.astimezone():%H:%M}{fix}")
-
-    def bound_of(self, target):
-        path = Path(target.split(' start=')[0])
-        for store in self.stores:
-            corpus = Path(store['corpus'])
-            if path.suffix == '.md' and path.is_file() and path.resolve().is_relative_to(corpus.resolve()):
-                return {'path': header(path).get('project')}
-        return None

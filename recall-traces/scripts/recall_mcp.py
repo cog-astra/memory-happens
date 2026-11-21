@@ -163,7 +163,8 @@ def search_text(found, words, limit, characters, *, outside_where=()):
 
 def preface(recall):
     warnings = recall.health()
-    return ''.join(f'⚠ {warning}\n' for warning in warnings) + ('\n' if warnings else '')
+    covered = f'[excluded by configuration: {recall.excluded} roots]\n' if recall.excluded else ''
+    return ''.join(f'⚠ {warning}\n' for warning in warnings) + covered + ('\n' if warnings or covered else '')
 
 
 def create_server():
@@ -200,7 +201,9 @@ def create_server():
         if root:
             if not Path(root).is_dir():
                 return f'No folder {root}. root must be an existing folder; without root the search covers all sources.\n'
-            return render_search(recall.search_folder(root, words), words, limit, characters)
+            found = recall.search_folder(root, words, budget=budget)
+            return render_search(found, words, limit, characters,
+                                 unfinished=recall.unfinished, budget=budget)
         since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
         found, outside = recall.search_with_scope(words, since, where, opt_in=git, budget=budget)
         return preface(recall) + render_search(found, words, limit, characters, outside_where=outside,

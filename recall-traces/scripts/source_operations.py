@@ -278,7 +278,7 @@ class Git:
     def during(self, window):
         found = git_source.repos(self.options)
         for repo, commit in git_source.across(found, lambda repo: git_source.commits(repo, full=True, window=window)):
-            trace = {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],
+            trace = {'time': commit['time'], 'where': str(repo),
                      'locator': f"{repo.as_posix()}@{commit['rev']}"}
             yield trace, None, commit['subject'], {
                 'event_time': iso(commit['time']), 'repository': repo.as_posix(), 'revision': commit['rev']}
@@ -286,7 +286,7 @@ class Git:
     def search(self, words, since):
         for repo, commit in self.commits(since, words):
             folded = commit['subject'].casefold()
-            hit = {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],
+            hit = {'time': commit['time'], 'where': str(repo),
                    'matched': [word for word in words if word in folded], 'total': 1, 'places': [],
                    'excerpt': commit['subject'], 'label': repo.as_posix(),
                    'locator': f"{repo.as_posix()}@{commit['rev']}"}

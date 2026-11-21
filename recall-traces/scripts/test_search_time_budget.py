@@ -84,5 +84,41 @@ class TimeBudgetTest(unittest.TestCase):
         self.assertIn('Nothing found', text)
 
 
+
+
+class SameTitleSourcesTest(unittest.TestCase):
+    def test_two_sources_with_one_title_keep_their_own_findings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            for name in ('one', 'two'):
+                (base / name).mkdir()
+                (base / name / f'{name}.md').write_text('lanternword', encoding='utf-8')
+            cfg = {'sources': [{'plugin': 'notes', 'roots': [str(base / name)]} for name in ('one', 'two')]}
+            for budget in (None, 60):
+                found, _ = Recall(cfg).search_with_scope(['lanternword'], budget=budget)
+                labels = sorted(hit['label'] for _, hits in found for hit in hits)
+                self.assertEqual(labels, ['one.md', 'two.md'], budget)
+
+
+class FolderBudgetTest(unittest.TestCase):
+    def test_a_search_of_one_folder_honours_the_budget_and_says_so(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            for day in range(1, 5):
+                path = base / f'n{day}.md'
+                path.write_text('lanternword', encoding='utf-8')
+                stamp = datetime(2026, 1, day, 12, tzinfo=timezone.utc).timestamp()
+                os.utime(path, (stamp, stamp))
+            calls = iter([False, False, True])
+            recall = Recall({'sources': []})
+            with patch.object(Source, 'expired', lambda self: next(calls, True)):
+                found = recall.search_folder(str(base), ['lanternword'], budget=60)
+            self.assertEqual(sorted(hit['label'] for hit in found[0][1]), ['n3.md', 'n4.md'])
+            self.assertEqual(len(recall.unfinished), 1)
+            self.assertIn('not finished within 60 s', render_search(found, ['lanternword'], 8, 8000,
+                                                                      unfinished=recall.unfinished, budget=60))
+            self.assertEqual(Recall({'sources': []}).search_folder(str(base), ['lanternword'])[0][1].__len__(), 4)
+
+
 if __name__ == '__main__':
     unittest.main()
