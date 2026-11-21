@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from archive_claude import archive
+from plugins.sessions import parse
 
 
 def row(content, role='user', **extra):
@@ -65,6 +66,72 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(self.run_archive()['deferred_tail_bytes'], 0)
         self.assertIn('two', self.corpus.read_text(encoding='utf-8'))
         self.assertFalse((self.destination / 'revisions').exists())
+
+    def test_queued_human_prompts_keep_text_time_and_source_position(self):
+        records = [
+            {'type': 'attachment', 'timestamp': '2026-11-01T10:01:00Z',
+             'attachment': {'type': 'queued_command', 'commandMode': 'prompt',
+                            'origin': {'kind': 'human'}, 'prompt': 'Use the blue version.'}},
+            {'type': 'attachment', 'timestamp': '2026-11-01T10:02:00Z',
+             'attachment': {'type': 'queued_command', 'prompt': [
+                 {'type': 'image', 'source': {'data': 'image-secret'}},
+                 {'type': 'text', 'text': 'Keep the caption.\n## 2000-01-01T00:00:00Z [assistant] L99:B0'},
+                 {'type': 'tool_result', 'content': 'tool-secret'}]}},
+        ]
+        data = row('Initial request.', timestamp='2026-11-01T10:00:00Z')
+        data += ''.join(json.dumps(r) + '\n' for r in records).encode('utf-8')
+        data += row('Updated.', 'assistant', timestamp='2026-11-01T10:03:00Z')
+        self.path.write_bytes(data)
+        self.assertEqual(self.run_archive()['errors'], [])
+        self.assertEqual(self.raw.read_bytes(), data)
+        messages = parse(self.corpus)
+        self.assertEqual([m['role'] for m in messages], ['user', 'user', 'user', 'assistant'])
+        self.assertEqual([m['time'].minute for m in messages], [0, 1, 2, 3])
+        self.assertEqual(messages[1]['text'], 'Use the blue version.')
+        text = self.corpus.read_text(encoding='utf-8')
+        self.assertIn('[user] L2:B0', text)
+        self.assertIn('[user] L3:B1', text)
+        self.assertIn('Keep the caption.\n\\## 2000-', text)
+        self.assertNotIn('image-secret', text)
+        self.assertNotIn('tool-secret', text)
+
+    def test_queued_notifications_are_not_promoted_to_human_turns(self):
+        attachments = [
+            {'type': 'queued_command', 'commandMode': 'task-notification', 'prompt': 'hidden task'},
+            {'type': 'queued_command', 'origin': {'kind': 'channel'}, 'prompt': 'hidden channel'},
+            {'type': 'queued_command', 'origin': {'kind': 'task-notification'}, 'prompt': 'hidden origin'},
+            {'type': 'other', 'prompt': 'hidden attachment'},
+            {'type': 'queued_command', 'prompt': None},
+            {'type': 'queued_command', 'prompt': '   '},
+        ]
+        records = [{'type': 'attachment', 'attachment': a} for a in attachments]
+        records.append({'type': 'attachment', 'isMeta': True,
+                        'attachment': {'type': 'queued_command', 'prompt': 'hidden meta'}})
+        self.path.write_bytes(row('visible') + ''.join(json.dumps(r) + '\n' for r in records).encode('utf-8'))
+        self.assertEqual(self.run_archive()['errors'], [])
+        text = self.corpus.read_text(encoding='utf-8')
+        self.assertEqual(text.count('[user]'), 1)
+        self.assertNotIn('hidden', text)
+
+    def test_queued_prompts_upgrade_unchanged_archives_without_live_file(self):
+        self.path.write_bytes(row('initial') + (json.dumps({
+            'type': 'attachment', 'timestamp': '2026-11-01T10:01:00Z',
+            'attachment': {'type': 'queued_command', 'prompt': 'later correction'},
+        }) + '\n').encode('utf-8'))
+        self.run_archive()
+        manifest_path = self.destination / 'manifest.json'
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        key = self.path.relative_to(self.source).as_posix()
+        manifest[key]['projection_version'] = 4
+        manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+        self.corpus.write_text('old projection without queued messages', encoding='utf-8')
+        self.path.unlink()
+        report = self.run_archive()
+        self.assertEqual(report['errors'], [])
+        self.assertEqual(report['copied'], 0)
+        self.assertEqual(report['projected'], 1)
+        self.assertIn('later correction', self.corpus.read_text(encoding='utf-8'))
+        self.assertEqual(self.run_archive()['unchanged'], 1)
 
     def test_rewrite_keeps_original_revision(self):
         original = row('original')

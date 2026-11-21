@@ -9,7 +9,7 @@ from archive_codex import atomic_write, digest, exclusive
 from claude_transcript import message_blocks
 from session_projection import escape_message_text
 
-PROJECTION_VERSION = 4
+PROJECTION_VERSION = 5
 
 
 def project(data, raw_path, relative):
