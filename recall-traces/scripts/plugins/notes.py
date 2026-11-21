@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from recall_core import Source, modified, scan
+from recall_core import Source, excluded, modified, scan
 
 
 def title(path):
@@ -20,6 +20,7 @@ class Plugin(Source):
             for pattern in self.options.get('patterns', ['*.md']):
                 for path in root.rglob(pattern):
                     if not any(part.startswith('.') for part in path.relative_to(root).parts) \
+                            and not excluded(path, self.options.get('exclude', [])) \
                             and not (since and modified(path) < since):
                         yield root, path
 

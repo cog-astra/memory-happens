@@ -6,7 +6,7 @@ from pathlib import Path
 
 from concurrent.futures import ThreadPoolExecutor
 
-from recall_core import REPO_REV, Source, mentions, modified
+from recall_core import REPO_REV, Source, excluded, mentions, modified
 
 SKIP = {'node_modules', '.git', 'Library', 'Temp', 'venv', '.venv', '__pycache__', 'build', 'dist'}
 FOUND = {}
@@ -33,7 +33,7 @@ def repos(options, ttl=600):
     if key not in FOUND or time.time() - FOUND[key][0] > ttl:
         FOUND[key] = (time.time(), [repo for root in key if Path(root).is_dir() for repo in discover(root)])
     explicit = [Path(repo) for repo in options.get('repos', []) if (Path(repo) / '.git').exists()]
-    return sorted(set(FOUND[key][1]) | set(explicit))
+    return sorted(repo for repo in set(FOUND[key][1]) | set(explicit) if not excluded(repo, options.get('exclude', [])))
 
 
 def commits(repo, since=None, words=(), full=False, window=None):

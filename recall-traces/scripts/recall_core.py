@@ -33,6 +33,12 @@ def modified(path):
     return datetime.fromtimestamp(Path(path).stat().st_mtime, timezone.utc)
 
 
+def excluded(path, roots):
+    path = os.path.normcase(os.path.abspath(str(path)))
+    return any(path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+               for root in (os.path.normcase(os.path.abspath(str(root))) for root in roots))
+
+
 def mentions(text, where):
     return not where or where.replace('\\', '/').casefold() in str(text).replace('\\', '/').casefold()
 
