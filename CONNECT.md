@@ -48,6 +48,30 @@ and change statistics, not full patches. A session corpus is the Markdown projec
 below, not the raw JSONL directory. There is no per-result boundary check: connect only
 material the user has authorized the calling agent to read.
 
+### Exclude part of a source
+
+Add `exclude` to each source entry whose enumeration should omit a directory or project:
+
+```json
+{"name":"notes","plugin":"notes","roots":["C:/chosen/notes"],"exclude":["C:/chosen/notes/drafts"]}
+```
+
+| Source | What an exclusion matches |
+| --- | --- |
+| Notes | Directories, including a starting root or its ancestor; resolved paths account for aliases. |
+| Git | Repository directories and discovery subtrees; resolved paths account for aliases. |
+| Sessions | The project path in the session header, not the archive filename; resolved paths account for aliases. |
+| Project memory | A project directory name, or its encoded prefix derived from a supplied project path. |
+
+Project-memory directory names lose path information. Excluding a project's real path does
+not also exclude memory stored under a junction's alternative spelling. List all known path
+spellings in `exclude`, or list their exact project-memory directory names; see [#95](https://github.com/cog-astra/memory-happens/issues/95).
+
+The coverage notice counts configured exclusions, not omitted documents. This setting selects
+the corpus for that source; it does not remove archived files or authorize access. Explicit
+folder searches and direct reads can bypass source enumeration. Apply exclusions to every
+relevant source entry when the same material is connected more than once.
+
 ### Raw Claude or Codex sessions: first export
 
 Skip this section if the selected source is already readable. Otherwise choose an archive
