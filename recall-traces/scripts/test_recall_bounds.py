@@ -56,6 +56,21 @@ class NestedBoundsTests(unittest.TestCase):
         self.assertFalse(bounds.hides(child / 'open/note.md'))
         self.assertFalse(bounds.hides(parent / 'closed/note.md'))
 
+    def test_folder_that_vanishes_during_the_scan_is_skipped(self):
+        root = self.space('kept', '[recall]\nopen = open\n')
+        gone = self.home / 'gone'
+        gone.mkdir()
+        real = os.scandir
+
+        def scandir(path):
+            if Path(path) == gone:
+                raise FileNotFoundError(path)
+            return real(path)
+
+        with patch('recall_bounds.os.scandir', scandir):
+            found = spaces([self.home])
+        self.assertEqual([space['root'] for space in found], [root])
+
     def test_open_child_does_not_reopen_a_closed_parent(self):
         parent = self.space('parent', '[recall]\nopen =\n')
         child = self.space('parent/one/two/child', '[recall]\nopen = .\n')

@@ -55,13 +55,17 @@ def spaces(bases):
             if identity in parents:
                 continue
             ancestors = parents | {identity}
-            with os.scandir(directory) as entries:
-                for entry in entries:
-                    path = Path(entry.path)
-                    if os.path.normcase(entry.name) == os.path.normcase(RULES):
-                        found[norm(path)] = parse(path)
-                    elif entry.is_dir():
-                        pending.append((path, ancestors))
+            try:
+                with os.scandir(directory) as entries:
+                    listing = list(entries)
+            except FileNotFoundError:
+                continue
+            for entry in listing:
+                path = Path(entry.path)
+                if os.path.normcase(entry.name) == os.path.normcase(RULES):
+                    found[norm(path)] = parse(path)
+                elif entry.is_dir():
+                    pending.append((path, ancestors))
     return list(found.values())
 
 
