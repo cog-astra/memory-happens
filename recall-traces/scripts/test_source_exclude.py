@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from datetime import datetime, timezone
 
+from configured_operations import Configuration
 from recall_core import Recall, slug
 from recall_mcp import preface
 from test_recall_core import commit, git
@@ -94,6 +95,38 @@ class AliasTest(unittest.TestCase):
                 cfg = {'sources': [{'plugin': 'notes', 'roots': [str(root) for root in roots], 'exclude': [str(skipped)]}]}
                 found = dict(Recall(cfg).search_with_scope(['lanternword'])[0])
                 self.assertEqual([hit['label'] for hit in found['notes']], ['kept/n.md'])
+
+
+class StartingRootTest(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.base = Path(directory.name).resolve()
+        self.vault = self.base / 'vault'
+        (self.vault / 'inner').mkdir(parents=True)
+        (self.vault / 'n.md').write_text('lanternword', encoding='utf-8')
+        (self.vault / 'inner' / 'm.md').write_text('lanternword', encoding='utf-8')
+
+    def operation(self, cfg, name, parameters):
+        events = list(Configuration(cfg).runner().invoke('notes', name, parameters))
+        return [e for e in events if e['type'] == 'record'], [e for e in events if e['type'] != 'record'][-1]['outcome']
+
+    def test_a_root_equal_to_or_inside_an_excluded_path_is_not_read(self):
+        for roots, skipped in (([self.vault], self.vault), ([self.vault / 'inner'], self.vault)):
+            cfg = {'sources': [{'name': 'notes', 'plugin': 'notes', 'roots': [str(r) for r in roots], 'exclude': [str(skipped)]}]}
+            self.assertEqual(dict(Recall(cfg).search_with_scope(['lanternword'])[0])['notes'], [])
+            self.assertEqual(self.operation(cfg, 'search', {'query': 'lanternword'})[0], [])
+            self.assertEqual(self.operation(cfg, 'passages', {})[0], [])
+
+    def test_configured_operations_say_how_many_roots_were_excluded(self):
+        cfg = {'sources': [{'name': 'notes', 'plugin': 'notes', 'roots': [str(self.vault)],
+                            'exclude': [str(self.vault / 'inner')]}]}
+        for name, parameters in (('search', {'query': 'lanternword'}), ('passages', {})):
+            records, outcome = self.operation(cfg, name, parameters)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(outcome['status'], 'success')
+            self.assertIn('Excluded by configuration: 1 roots', outcome['message'])
+            self.assertNotIn('inner', outcome['message'])
 
 
 if __name__ == '__main__':

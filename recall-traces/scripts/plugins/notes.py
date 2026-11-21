@@ -19,6 +19,8 @@ class Plugin(Source):
     def paths(self, since=None):
         for root in map(Path, self.options.get('roots', [])):
             skipped = self.options.get('exclude', [])
+            if excluded(root, skipped):
+                continue
             patterns = self.options.get('patterns', ['*.md'])
             for folder, children, names in os.walk(root):
                 children[:] = [child for child in children if not child.startswith('.')

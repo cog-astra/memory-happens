@@ -52,6 +52,10 @@ def is_path(entry):
     return any(mark in str(entry) for mark in ('/', '\\', ':'))
 
 
+def excluded_roots(options):
+    return {real(root) if is_path(root) else str(root).casefold() for root in options.get('exclude', [])}
+
+
 def excluded_project(name, roots):
     name = str(name).casefold()
     return any(name == str(root).casefold() or (is_path(root) and (name == slug(root) or name.startswith(slug(root) + '-')))
@@ -163,8 +167,7 @@ class Recall:
         self.plugins = load_plugins(self.cfg)
         self.skipped = []
         self.unfinished = []
-        self.excluded = len({real(root) if is_path(root) else str(root).casefold()
-                             for plugin in self.plugins for root in plugin.options.get('exclude', [])})
+        self.excluded = len(set().union(*(excluded_roots(plugin.options) for plugin in self.plugins)))
 
     def recent(self, since, where=None):
         found = [{**trace, 'source': plugin.name}

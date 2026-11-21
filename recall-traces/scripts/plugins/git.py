@@ -33,7 +33,8 @@ def repos(options, ttl=600):
     skipped = tuple(options.get('exclude', []))
     key = (tuple(options.get('discover', [])), skipped)
     if key not in FOUND or time.time() - FOUND[key][0] > ttl:
-        FOUND[key] = (time.time(), [repo for root in key[0] if Path(root).is_dir() for repo in discover(root, skipped=skipped)])
+        FOUND[key] = (time.time(), [repo for root in key[0] if Path(root).is_dir() and not excluded(root, skipped)
+                                for repo in discover(root, skipped=skipped)])
     explicit = [Path(repo) for repo in options.get('repos', []) if (Path(repo) / '.git').exists()]
     return sorted(repo for repo in set(FOUND[key][1]) | set(explicit) if not excluded(repo, options.get('exclude', [])))
 

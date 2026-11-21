@@ -8,7 +8,7 @@ from pydantic import Field, model_validator
 
 import recall_archive
 from plugins import git as git_source, memory as memory_source, notes as notes_source, sessions as session_source
-from recall_core import REPO_REV, mentions, modified
+from recall_core import REPO_REV, excluded_roots, mentions, modified
 from recall_operations import AccessDenied, Evidence, Operation, Outcome, Passage, Value
 from recall_query import DESCRIPTION, RECOVERY, syntax_problem
 from recall_ranking import relevance
@@ -128,6 +128,7 @@ class Coverage:
         self.present, self.missing = present, missing
         self.warnings, self.recovery = list(warnings), list(recovery)
         self.outside_where = 0
+        self.excluded = 0
 
     def outcome(self, kind):
         if not self.present:
@@ -142,6 +143,8 @@ class Coverage:
         outcome = (Outcome(status='partial', code=reasons[0][0], message='; '.join(text for _, text in reasons) + '.',
                            next_steps=self.recovery if self.missing or self.warnings else [])
                    if reasons else Outcome(status='success'))
+        if self.excluded:
+            outcome.message = f'{outcome.message} Excluded by configuration: {self.excluded} roots.'.strip()
         if self.outside_where:
             outcome.message = f'{outcome.message} Matching records outside where: {self.outside_where}.'.strip()
             outcome.next_steps.append('Search this source without where for a broader scope.')
@@ -337,6 +340,7 @@ class Plugin:
                           message=f"No operation adapter for source type {self.kind!r}.")
             return
         coverage = self.source.coverage(datetime.now(timezone.utc))
+        coverage.excluded = len(excluded_roots(self.options))
         if operation == 'health':
             for warning in [*[f'{path} is missing' for path in coverage.missing], *coverage.warnings]:
                 yield Passage(text=warning, context={'source_type': self.kind})

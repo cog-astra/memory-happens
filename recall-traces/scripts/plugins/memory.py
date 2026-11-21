@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from recall_core import Source, excluded_project, modified, scan
+from recall_core import Source, excluded, excluded_project, modified, scan
 
 
 def frontmatter(text):
@@ -21,6 +21,8 @@ class Plugin(Source):
     def paths(self, since=None):
         skipped = self.options.get('exclude', [])
         for root in map(Path, self.options.get('roots', [])):
+            if excluded(root, skipped):
+                continue
             for path in root.glob('*/memory/*.md'):
                 if path.name != 'MEMORY.md' and not excluded_project(path.parent.parent.name, skipped) \
                         and not (since and modified(path) < since):
