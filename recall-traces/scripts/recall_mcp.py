@@ -122,9 +122,12 @@ def hit_block(hit, words):
     return head + f"  line {hit['line']} | {around(hit['excerpt'], words)}{tail}\n" + read
 
 
-def render_search(found, words, limit, characters, *, outside_where=(), skipped=()):
-    note = (f"[not searched: {', '.join(skipped)} - ask explicitly: git=true, or where naming a repository; "
-            'no finding here does not mean nothing there]' + chr(10)) if skipped else ''
+def render_search(found, words, limit, characters, *, outside_where=(), skipped=(), unfinished=(), budget=None):
+    late = (f"[not finished within {budget} s: {'; '.join(f'{title} - {what}' for title, what in unfinished)}; "
+            'repeat with a larger budget or name the source or where]' + chr(10)) if unfinished else ''
+    off = (f"[not searched: {', '.join(skipped)} - ask explicitly: git=true, or where naming a repository; "
+           'no finding here does not mean nothing there]' + chr(10)) if skipped else ''
+    note = late + off
     return note + search_text(found, words, limit, characters, outside_where=outside_where)
 
 
@@ -183,6 +186,7 @@ def create_server():
         days: Annotated[int | None, Field(description='Only traces from the last N days', ge=1)] = None,
         where: Annotated[str | None, Field(description='Part of a project, repository or note path')] = None,
         root: Annotated[str | None, Field(description='Search only this folder instead of the configured sources')] = None,
+        budget: Annotated[int, Field(description='Seconds the search may take; cheap sources first, the answer says what was not reached', ge=1)] = 30,
         git: Annotated[bool, Field(description='Also search commit messages: slow, off by default; where naming a repository turns it on for that repository')] = False,
         limit: Annotated[int, Field(description='Findings per source', ge=1)] = 8,
         characters: Annotated[int, Field(description='Answer length limit in Unicode characters, not tokens', ge=500)] = 8000,
@@ -201,9 +205,9 @@ def create_server():
                 return recall.bounds.refusal(root, space)
             return recall.bounds.notice() + render_search(recall.search_folder(root, words), words, limit, characters)
         since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
-        found, outside = recall.search_with_scope(words, since, where, opt_in=git)
+        found, outside = recall.search_with_scope(words, since, where, opt_in=git, budget=budget)
         return preface(recall) + render_search(found, words, limit, characters, outside_where=outside,
-                                               skipped=recall.skipped)
+                                               skipped=recall.skipped, unfinished=recall.unfinished, budget=budget)
 
     @server.tool(structured_output=False, description='Read a found place: a file path (session, note, memory) with a line number, or repository@revision for a commit.')
     def read(

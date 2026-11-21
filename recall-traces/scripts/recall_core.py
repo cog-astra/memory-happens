@@ -4,6 +4,7 @@ import itertools
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -66,6 +67,20 @@ def scan(path, words, stamp=None):
 class Source:
     title = ''
     opt_in = False
+    cost = 5
+    deadline = None
+    stopped = None
+
+    def expired(self):
+        return self.deadline is not None and time.monotonic() >= self.deadline
+
+    def newest(self, items, path_of=lambda item: item):
+        stamped = sorted(((modified(path_of(item)), item) for item in items), key=lambda pair: pair[0], reverse=True)
+        for when, item in stamped:
+            if self.expired():
+                self.stopped = f'files last changed on or before {when.astimezone():%Y-%m-%d}'
+                return
+            yield item
 
     def covers(self, where):
         return False
@@ -127,6 +142,7 @@ class Recall:
         self.plugins = load_plugins(self.cfg)
         self.bounds = Bounds(self.cfg.get('spaces', []), reader)
         self.skipped = []
+        self.unfinished = []
 
     def space_of(self, bound):
         if 'files' in bound:
@@ -153,15 +169,22 @@ class Recall:
     def search(self, words, since=None, where=None):
         return self.search_with_scope(words, since, where)[0]
 
-    def search_with_scope(self, words, since=None, where=None, opt_in=True):
-        found, outside_where = [], []
-        self.skipped = []
-        for plugin in self.plugins:
+    def search_with_scope(self, words, since=None, where=None, opt_in=True, budget=None):
+        found, outside_where = {}, []
+        self.skipped, self.unfinished = [], []
+        deadline = None if budget is None else time.monotonic() + budget
+        order = self.plugins if budget is None else sorted(self.plugins, key=lambda plugin: getattr(plugin, 'cost', 5))
+        for plugin in order:
             hits, outside = [], 0
+            if plugin.opt_in and not (opt_in or plugin.covers(where)):
+                self.skipped.append(plugin.title)
+                continue
+            if deadline is not None and time.monotonic() >= deadline:
+                self.unfinished.append((plugin.title, 'not started'))
+                found[plugin.title] = []
+                continue
+            plugin.deadline, plugin.stopped = deadline, None
             if plugin.opt_in:
-                if not (opt_in or plugin.covers(where)):
-                    self.skipped.append(plugin.title)
-                    continue
                 stream = plugin.search(words, since, where, self.searchable)
             else:
                 stream = plugin.search(words, since)
@@ -173,10 +196,12 @@ class Recall:
                 else:
                     outside += 1
             hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
-            found.append((plugin.title, hits))
+            found[plugin.title] = hits
+            if getattr(plugin, 'stopped', None):
+                self.unfinished.append((plugin.title, plugin.stopped))
             if outside:
                 outside_where.append((plugin.title, outside))
-        return found, outside_where
+        return [(plugin.title, found[plugin.title]) for plugin in self.plugins if plugin.title in found], outside_where
 
     def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json')):
         from plugins.notes import Plugin as Folder
