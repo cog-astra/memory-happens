@@ -203,11 +203,15 @@ class Recall:
                 outside_where.append((plugin.title, outside))
         return [(plugin.title, found[id(plugin)]) for plugin in self.plugins if id(plugin) in found], outside_where
 
-    def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json')):
+    def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json'), budget=None):
         from plugins.notes import Plugin as Folder
         folder = Folder({'roots': [str(path) for path in recall_archive.search_roots(root)], 'patterns': list(patterns)})
         folder.title = f'folder {root}'
+        self.unfinished = []
+        folder.deadline, folder.stopped = (None if budget is None else time.monotonic() + budget), None
         hits = [hit for hit in folder.search(words, None) if self.visible(hit['bound'])]
+        if folder.stopped:
+            self.unfinished.append((folder.title, folder.stopped))
         hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
         return [(folder.title, hits)]
 
