@@ -127,7 +127,7 @@ class Recall:
         if 'files' in bound:
             if not bound['files']:
                 return self.bounds.owner_of(bound['repo'])
-            return next((space for path in bound['files'] if (space := self.bounds.owner_of(path))), None)
+            return next((space for path in bound['files'] if (space := self.bounds.owner_of_tracked(bound['repo'], path))), None)
         if 'project' in bound:
             return self.bounds.owner_of_project(bound['project'])
         return self.bounds.owner_of(bound.get('path'))

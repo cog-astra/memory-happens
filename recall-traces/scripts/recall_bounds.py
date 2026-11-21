@@ -77,6 +77,7 @@ def owns(space, reader):
 class Bounds:
     def __init__(self, bases, reader=None):
         self.reader = reader or os.environ.get('RECALL_READER') or os.getcwd()
+        self.repositories = {}
         self.closed = [space for space in spaces(bases) if not owns(space, self.reader)
                        and not (any(within(space['root'], o) for o in space['open'])
                                 and not any(Path(p).exists() for p in space['private']))]
@@ -84,6 +85,22 @@ class Bounds:
     def owner_of(self, path):
         return next((space for space in self.closed if path and
                      (closes(space, path, within) or closes(space, path, resolved_within))), None)
+
+    def owner_of_tracked(self, repo, path):
+        # Paths of a commit are names inside the repository, often long gone from disk:
+        # resolve the repository once and treat the rest as plain names.
+        if not path:
+            return None
+        if repo not in self.repositories:
+            self.repositories[repo] = Path(repo).resolve()
+        resolved = self.repositories[repo]
+        try:
+            name = Path(path).relative_to(repo)
+        except ValueError:
+            return self.owner_of(path)
+        rebased = lambda _, folder: within(resolved / name, folder)
+        return next((space for space in self.closed
+                     if closes(space, path, within) or closes(space, path, rebased)), None)
 
     def owner_of_project(self, key):
         prefix = lambda project, folder: project.casefold().startswith(slug(folder))

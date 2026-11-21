@@ -136,6 +136,30 @@ class NestedBoundsTests(unittest.TestCase):
                         self.assertTrue(recall.read(str(route / 'closed/note.md')).startswith('Closed:'))
                         self.assertIn('OPEN boundarycanary', recall.read(str(route / 'open/note.md')))
 
+class TrackedPathTests(unittest.TestCase):
+    def test_commit_paths_get_the_same_verdict_as_plain_paths(self):
+        with tempfile.TemporaryDirectory() as name:
+            repo = Path(name).resolve() / 'repo'
+            (repo / 'closed').mkdir(parents=True)
+            (repo / 'open').mkdir()
+            (repo / 'closed/humans.txt').write_text('[recall]\nopen = nothing\n', encoding='utf-8')
+            bounds = Bounds([str(repo)], reader=str(Path(name) / 'elsewhere'))
+            for relative in ('closed/note.md', 'closed/gone/deleted.md', 'open/note.md', 'open/gone.md', 'top.md'):
+                with self.subTest(relative=relative):
+                    path = repo / relative
+                    self.assertIs(bounds.owner_of_tracked(repo, path), bounds.owner_of(path))
+            self.assertIsNotNone(bounds.owner_of_tracked(repo, repo / 'closed/gone/deleted.md'))
+            self.assertIsNone(bounds.owner_of_tracked(repo, repo / 'open/gone.md'))
+
+    def test_repository_is_resolved_once(self):
+        with tempfile.TemporaryDirectory() as name:
+            repo = Path(name).resolve()
+            bounds = Bounds([], reader=name)
+            with patch.object(Path, 'resolve', autospec=True, side_effect=Path.resolve) as resolve:
+                for index in range(50):
+                    bounds.owner_of_tracked(repo, repo / f'dir{index}/file.md')
+            self.assertEqual(resolve.call_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()
