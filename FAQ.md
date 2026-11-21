@@ -87,8 +87,7 @@ detail when needed, without revealing protected contents.
 
 ## Does every user need a humans.txt file?
 
-No. It is a convention used in our development environment, not a universal
-requirement. Source selection and the user's existing access policies should
+No. This line ignores it. Source selection and the user's existing access policies
 govern what recall can read. Technical reachability alone is not permission.
 
 ## Will it remember things without being asked?

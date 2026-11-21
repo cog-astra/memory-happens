@@ -15,7 +15,7 @@ class UnloadedOperationTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_an_unloadable_operation_names_itself_and_leaves_sources_working(self):
         with tempfile.TemporaryDirectory() as directory:
-            path, cfg, notes, _ = fixture(Path(directory))
+            path, cfg, notes = fixture(Path(directory))
             cfg['operations'] = [{'name': 'missing', 'module': 'plugins.no_such_operation'},
                                  {'name': 'reduce', 'module': 'plugins.ollama_reduce', 'options': {}},
                                  {'name': 'fuzzy', 'module': 'trigram_selector'}]
@@ -55,7 +55,7 @@ class UnloadedOperationTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_a_malformed_entry_still_stops_the_configuration_but_says_why(self):
         with tempfile.TemporaryDirectory() as directory:
-            path, cfg, _, _ = fixture(Path(directory))
+            path, cfg, _ = fixture(Path(directory))
             cfg['operations'] = [{'name': 'x', 'module': 'json'}]
             path.write_text(json.dumps(cfg), encoding='utf-8')
             async with server('--sources', str(path)) as session:

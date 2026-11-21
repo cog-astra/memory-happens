@@ -122,7 +122,16 @@ def hit_block(hit, words):
     return head + f"  line {hit['line']} | {around(hit['excerpt'], words)}{tail}\n" + read
 
 
-def render_search(found, words, limit, characters, *, outside_where=()):
+def render_search(found, words, limit, characters, *, outside_where=(), skipped=(), unfinished=(), budget=None):
+    late = (f"[not finished within {budget} s: {'; '.join(f'{title} - {what}' for title, what in unfinished)}; "
+            'repeat with a larger budget or name the source or where]' + chr(10)) if unfinished else ''
+    off = (f"[not searched: {', '.join(skipped)} - ask explicitly: git=true, or where naming a repository; "
+           'no finding here does not mean nothing there]' + chr(10)) if skipped else ''
+    note = late + off
+    return note + search_text(found, words, limit, characters, outside_where=outside_where)
+
+
+def search_text(found, words, limit, characters, *, outside_where=()):
     hint = ('[matching records outside where: ' + ', '.join(f'{title}: {count}' for title, count in outside_where)
             + '; search without where for a broader scope]\n') if outside_where else ''
     groups = [(title, hits) for title, hits in found if hits]
@@ -154,7 +163,8 @@ def render_search(found, words, limit, characters, *, outside_where=()):
 
 def preface(recall):
     warnings = recall.health()
-    return ''.join(f'⚠ {warning}\n' for warning in warnings) + ('\n' if warnings else '') + recall.bounds.notice()
+    covered = f'[excluded by configuration: {recall.excluded} roots]\n' if recall.excluded else ''
+    return ''.join(f'⚠ {warning}\n' for warning in warnings) + covered + ('\n' if warnings or covered else '')
 
 
 def create_server():
@@ -177,6 +187,8 @@ def create_server():
         days: Annotated[int | None, Field(description='Only traces from the last N days', ge=1)] = None,
         where: Annotated[str | None, Field(description='Part of a project, repository or note path')] = None,
         root: Annotated[str | None, Field(description='Search only this folder instead of the configured sources')] = None,
+        budget: Annotated[int, Field(description='Seconds the search may take; cheap sources first, the answer says what was not reached', ge=1)] = 30,
+        git: Annotated[bool, Field(description='Also search commit messages: slow, off by default; where naming a repository turns it on for that repository')] = False,
         limit: Annotated[int, Field(description='Findings per source', ge=1)] = 8,
         characters: Annotated[int, Field(description='Answer length limit in Unicode characters, not tokens', ge=500)] = 8000,
     ) -> str:
@@ -189,13 +201,13 @@ def create_server():
         if root:
             if not Path(root).is_dir():
                 return f'No folder {root}. root must be an existing folder; without root the search covers all sources.\n'
-            space = recall.bounds.owner_of(root)
-            if space:
-                return recall.bounds.refusal(root, space)
-            return recall.bounds.notice() + render_search(recall.search_folder(root, words), words, limit, characters)
+            found = recall.search_folder(root, words, budget=budget)
+            return render_search(found, words, limit, characters,
+                                 unfinished=recall.unfinished, budget=budget)
         since = datetime.now(timezone.utc) - timedelta(days=days) if days else None
-        found, outside = recall.search_with_scope(words, since, where)
-        return preface(recall) + render_search(found, words, limit, characters, outside_where=outside)
+        found, outside = recall.search_with_scope(words, since, where, opt_in=git, budget=budget)
+        return preface(recall) + render_search(found, words, limit, characters, outside_where=outside,
+                                               skipped=recall.skipped, unfinished=recall.unfinished, budget=budget)
 
     @server.tool(structured_output=False, description='Read a found place: a file path (session, note, memory) with a line number, or repository@revision for a commit.')
     def read(

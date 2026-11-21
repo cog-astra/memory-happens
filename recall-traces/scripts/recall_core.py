@@ -1,14 +1,15 @@
+import functools
 import importlib
 import importlib.util
 import itertools
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import recall_archive
-from recall_bounds import Bounds
 from recall_ranking import relevance
 
 CONFIG = Path(os.environ.get('RECALL_CONFIG') or Path(__file__).with_name('sources.json'))
@@ -31,6 +32,34 @@ def load_config(path=CONFIG):
 
 def modified(path):
     return datetime.fromtimestamp(Path(path).stat().st_mtime, timezone.utc)
+
+
+@functools.lru_cache(maxsize=None)
+def real(path):
+    return os.path.normcase(os.path.realpath(str(path)))
+
+
+def excluded(path, roots):
+    path = real(path)
+    return any(path == root or path.startswith(root.rstrip(os.sep) + os.sep) for root in map(real, roots))
+
+
+def slug(path):
+    return re.sub(r'[^A-Za-z0-9]', '-', os.path.abspath(str(path))).casefold()
+
+
+def is_path(entry):
+    return any(mark in str(entry) for mark in ('/', '\\', ':'))
+
+
+def excluded_roots(options):
+    return {real(root) if is_path(root) else str(root).casefold() for root in options.get('exclude', [])}
+
+
+def excluded_project(name, roots):
+    name = str(name).casefold()
+    return any(name == str(root).casefold() or (is_path(root) and (name == slug(root) or name.startswith(slug(root) + '-')))
+               for root in roots)
 
 
 def mentions(text, where):
@@ -65,6 +94,24 @@ def scan(path, words, stamp=None):
 
 class Source:
     title = ''
+    opt_in = False
+    cost = 5
+    deadline = None
+    stopped = None
+
+    def expired(self):
+        return self.deadline is not None and time.monotonic() >= self.deadline
+
+    def newest(self, items, path_of=lambda item: item):
+        stamped = sorted(((modified(path_of(item)), item) for item in items), key=lambda pair: pair[0], reverse=True)
+        for when, item in stamped:
+            if self.expired():
+                self.stopped = f'files last changed on or before {when.astimezone():%Y-%m-%d}'
+                return
+            yield item
+
+    def covers(self, where):
+        return False
 
     def __init__(self, options):
         self.options = options
@@ -77,9 +124,6 @@ class Source:
 
     def health(self, now):
         return []
-
-    def bound_of(self, target):
-        return None
 
     def read(self, target, start, lines, characters):
         return None
@@ -118,54 +162,65 @@ def read_file(path, start, lines, characters):
 
 
 class Recall:
-    def __init__(self, cfg=None, reader=None):
+    def __init__(self, cfg=None):
         self.cfg = cfg if cfg is not None else load_config()
         self.plugins = load_plugins(self.cfg)
-        self.bounds = Bounds(self.cfg.get('spaces', []), reader)
-
-    def space_of(self, bound):
-        if 'files' in bound:
-            if not bound['files']:
-                return self.bounds.owner_of(bound['repo'])
-            return next((space for path in bound['files'] if (space := self.bounds.owner_of(path))), None)
-        if 'project' in bound:
-            return self.bounds.owner_of_project(bound['project'])
-        return self.bounds.owner_of(bound.get('path'))
-
-    def visible(self, bound):
-        return self.space_of(bound) is None
+        self.skipped = []
+        self.unfinished = []
+        self.excluded = len(set().union(*(excluded_roots(plugin.options) for plugin in self.plugins)))
 
     def recent(self, since, where=None):
         found = [{**trace, 'source': plugin.name}
                  for plugin in self.plugins for trace in plugin.recent(since)
-                 if trace['time'] >= since and mentions(trace['where'], where) and self.visible(trace['bound'])]
+                 if trace['time'] >= since and mentions(trace['where'], where)]
         return sorted(found, key=lambda trace: trace['time'], reverse=True)
 
     def search(self, words, since=None, where=None):
         return self.search_with_scope(words, since, where)[0]
 
-    def search_with_scope(self, words, since=None, where=None):
-        found, outside_where = [], []
-        for plugin in self.plugins:
+    def search_with_scope(self, words, since=None, where=None, opt_in=True, budget=None):
+        found, outside_where = {}, []
+        self.skipped, self.unfinished = [], []
+        deadline = None if budget is None else time.monotonic() + budget
+        order = self.plugins if budget is None else sorted(self.plugins, key=lambda plugin: getattr(plugin, 'cost', 5))
+        for plugin in order:
             hits, outside = [], 0
-            for hit in plugin.search(words, since):
-                if (since and hit['time'] < since) or not self.visible(hit['bound']):
+            if plugin.opt_in and not (opt_in or plugin.covers(where)):
+                self.skipped.append(plugin.title)
+                continue
+            if deadline is not None and time.monotonic() >= deadline:
+                self.unfinished.append((plugin.title, 'not started'))
+                found[id(plugin)] = []
+                continue
+            plugin.deadline, plugin.stopped = deadline, None
+            if plugin.opt_in:
+                stream = plugin.search(words, since, where)
+            else:
+                stream = plugin.search(words, since)
+            for hit in stream:
+                if since and hit['time'] < since:
                     continue
                 if mentions(hit['where'], where):
                     hits.append(hit)
                 else:
                     outside += 1
             hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
-            found.append((plugin.title, hits))
+            found[id(plugin)] = hits
+            if getattr(plugin, 'stopped', None):
+                self.unfinished.append((plugin.title, plugin.stopped))
             if outside:
                 outside_where.append((plugin.title, outside))
-        return found, outside_where
+        return [(plugin.title, found[id(plugin)]) for plugin in self.plugins if id(plugin) in found], outside_where
 
-    def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json')):
+    def search_folder(self, root, words, patterns=('*.md', '*.txt', '*.json'), budget=None):
         from plugins.notes import Plugin as Folder
         folder = Folder({'roots': [str(path) for path in recall_archive.search_roots(root)], 'patterns': list(patterns)})
         folder.title = f'folder {root}'
-        hits = [hit for hit in folder.search(words, None) if self.visible(hit['bound'])]
+        self.unfinished = []
+        folder.deadline, folder.stopped = (None if budget is None else time.monotonic() + budget), None
+        hits = list(folder.search(words, None))
+        if folder.stopped:
+            self.unfinished.append((folder.title, folder.stopped))
         hits.sort(key=lambda hit: relevance(hit['matched'], hit['total'], hit['time'], hit.get('excerpt', '')), reverse=True)
         return [(folder.title, hits)]
 
@@ -176,13 +231,6 @@ class Recall:
     def read(self, target, start=1, lines=80, characters=6000):
         target, _, given = target.removeprefix('read: ').partition(' start=')
         start = int(given) if given.isdigit() else start
-        space = self.bounds.owner_of(target) if Path(target).is_file() else None
-        if space:
-            return self.bounds.refusal(target, space)
-        bound = next((b for plugin in self.plugins if (b := plugin.bound_of(target)) is not None), {'path': target})
-        space = self.space_of(bound)
-        if space:
-            return self.bounds.refusal(target, space)
         for plugin in self.plugins:
             text = plugin.read(target, start, lines, characters)
             if text is not None:

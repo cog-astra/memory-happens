@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-import recall_bounds
+from test_support import slug
 from test_operation_mcp import server
 from test_recall_core import commit, git
 
@@ -23,24 +23,20 @@ def fixture(base):
             f'# {agent} session fixture\nproject: {project}\norigin: cli\n\n'
             f'## {now} [user] L1:B0\n\nWhy was the cache removed?\n\n'
             f'## {now} [assistant] L2:B0\n\nThe cache key omitted the row revision.\n', encoding='utf-8')
-    memory = base / 'projects' / recall_bounds.slug(project) / 'memory'
+    memory = base / 'projects' / slug(project) / 'memory'
     memory.mkdir(parents=True)
     (memory / 'lesson.md').write_text('---\ndescription: cache lesson\n---\nCache keys must include revision.\n', encoding='utf-8')
     notes = base / 'notes'
     notes.mkdir()
     (notes / 'cache.md').write_text('# Cache investigation\nThe cache was stale.\nNext: version every row.\n', encoding='utf-8')
-    private = base / 'spaces' / 'private'
-    private.mkdir(parents=True)
-    (private / 'humans.txt').write_text('[recall]\nopen =\n', encoding='utf-8')
-    (private / 'secret.md').write_text('# Forbidden cache\nsecret sentinel\n', encoding='utf-8')
-    cfg = {'spaces': [str(base / 'spaces')], 'sources': [
+    cfg = {'sources': [
         {'plugin': 'sessions', 'stores': [{'corpus': str(corpus)}]},
         {'plugin': 'memory', 'roots': [str(base / 'projects')]},
-        {'plugin': 'notes', 'roots': [str(notes), str(private)]},
+        {'plugin': 'notes', 'roots': [str(notes)]},
         {'plugin': 'git', 'repos': [str(project)]}]}
     path = base / 'sources.json'
     path.write_text(json.dumps(cfg), encoding='utf-8')
-    return path, cfg, notes, private
+    return path, cfg, notes
 
 
 class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
@@ -55,10 +51,9 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_all_sources_search_read_fresh_server_and_folder(self):
         with tempfile.TemporaryDirectory() as directory:
-            path, cfg, notes, private = fixture(Path(directory))
+            path, cfg, notes = fixture(Path(directory))
             async with server('--sources', str(path)) as session:
                 found = await self.call(session, 'search', query='cache', characters=20000)
-                self.assertNotIn('secret sentinel', json.dumps(found))
                 self.assertEqual({r['evidence'][0]['source'] for r in found['records']},
                                  {'sessions', 'memory', 'notes', 'git'})
                 note = next(r['evidence'][0] for r in found['records'] if r['evidence'][0]['source'] == 'notes')
@@ -74,13 +69,10 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
                 self.assertIn('The cache was stale.', detail['records'][0]['text'])
                 self.assertNotIn('Next: version', detail['records'][0]['text'])
                 self.assertIsNotNone(detail['outcome']['continuation'])
-                denied = await self.call(session, 'read', path=str(private / 'secret.md'), characters=10000)
-                self.assertEqual(denied['records'], [])
-                self.assertNotEqual(denied['outcome']['status'], 'success')
 
     async def test_search_exposes_outside_scope_counts_in_source_outcomes(self):
         with tempfile.TemporaryDirectory() as directory:
-            path, _, _, _ = fixture(Path(directory))
+            path, _, _ = fixture(Path(directory))
             async with server('--sources', str(path)) as session:
                 result = await self.call(session, 'search', query='cache', where='no-such-project', characters=20000)
                 self.assertEqual(result['records'], [])
@@ -93,7 +85,7 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_partial_source_and_cross_source_recipe(self):
         with tempfile.TemporaryDirectory() as directory:
-            path, cfg, notes, private = fixture(Path(directory))
+            path, cfg, notes = fixture(Path(directory))
             cfg['sources'].append({'plugin': 'notes', 'name': 'missing', 'roots': [str(Path(directory) / 'absent')]})
             path.write_text(json.dumps(cfg), encoding='utf-8')
             async with server('--sources', str(path)) as session:
@@ -127,7 +119,7 @@ class ConfiguredMCPTest(unittest.IsolatedAsyncioTestCase):
     async def test_legacy_addresses_keep_their_window_and_choose_the_connected_git_source(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            path, cfg, notes, _ = fixture(base)
+            path, cfg, notes = fixture(base)
             second = base / 'second'
             second.mkdir()
             git(second, 'init', '-q')

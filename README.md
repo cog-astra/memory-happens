@@ -50,8 +50,8 @@ session archivers and their tests. It was imported from a working installation; 
 records the source revision. Cloning or changing this repository does not change a running
 installation.
 
-Known limitations are tracked in issues. The current
-`humans.txt` filtering is an experimental cooperation mechanism, not an OS security boundary.
+Known limitations are tracked in issues. This line has no `humans.txt` filtering: recall reads whatever its
+configured sources contain, so connect only material the calling agent may read.
 Python plugins run trusted code in the server process.
 
 ## Install and test

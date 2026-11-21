@@ -1,5 +1,4 @@
 {
-  "spaces": ["~/Projects"],
   "sources": [
     {"plugin": "sessions",
      "stores": [

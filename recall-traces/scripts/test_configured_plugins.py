@@ -35,7 +35,7 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
     async def test_configured_transform_runs_after_different_sources_with_options(self):
         with tempfile.TemporaryDirectory(prefix='recall plugin ') as directory:
             base = Path(directory)
-            path, cfg, _, _ = fixture(base)
+            path, cfg, _ = fixture(base)
             (base / 'third_party.py').write_text(textwrap.dedent('''\
                 from recall_operations import Operation, Outcome, Passage
 
@@ -67,9 +67,7 @@ class ConfiguredPluginsTest(unittest.IsolatedAsyncioTestCase):
                     result = await session.call_tool('operation_run', {'steps': steps, 'characters': 10000, 'view': 'records'})
                     self.assertFalse(result.is_error, result)
                     body = result.structured_content
-                    self.assertEqual(body['outcome']['status'], 'partial' if source == 'notes' else 'success', body)
-                    if source == 'notes':
-                        self.assertEqual(body['outcome']['code'], 'policy_filtered')
+                    self.assertEqual(body['outcome']['status'], 'success', body)
                     record = body['records'][0]
                     self.assertTrue(record['text'].startswith('Combined: '))
                     self.assertEqual({e['source'] for e in record['evidence']}, {source})

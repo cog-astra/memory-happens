@@ -149,8 +149,8 @@ Readers resolve source-specific resources; policy adapters check them. The runne
 access dependencies into derived records by union and applies the configured policy on release.
 Only that policy may authorize removing an access dependency; a plugin's narrower explanation
 is not permission. Cross-call input metadata alone does not prove complete dependency coverage.
-This contract does not sandbox arbitrary in-process plugin code. `humans.txt` is one environment's
-policy adapter, not a requirement for every installation.
+This contract does not sandbox arbitrary in-process plugin code. The runner's policy hook stays;
+this line ships no `humans.txt` adapter.
 
 ## First executable slice
 

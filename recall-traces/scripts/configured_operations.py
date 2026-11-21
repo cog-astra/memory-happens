@@ -11,7 +11,6 @@ from pydantic import Field
 import recall_archive
 from operation_mcp import create_operation_server, reply
 from plugins.collect import Plugin as Collection
-from recall_bounds import Bounds
 from recall_core import load_config
 from recall_operations import Operation, Outcome, Value
 from recall_recipe import run
@@ -79,11 +78,9 @@ class Unloaded:
 
 
 class Configuration:
-    def __init__(self, cfg, reader=None, selector='plugins.select_literal'):
-        from source_operations import FolderPlugin, Places, Plugin
+    def __init__(self, cfg, selector='plugins.select_literal'):
+        from source_operations import FolderPlugin, Plugin
 
-        self.bounds = Bounds(cfg.get('spaces', []), reader)
-        places = Places(self.bounds, cfg.get('sources', []))
         self.entries, self.plugins = {}, {}
         for entry in cfg.get('sources', []):
             stem = Path(entry['plugin']).stem
@@ -93,8 +90,8 @@ class Configuration:
             if not re.fullmatch(r'[A-Za-z0-9_.-]{1,40}', alias) or alias in self.plugins or alias in ('folder', 'selector', 'collect'):
                 raise ValueError(f'Invalid or duplicate source name: {alias}')
             self.entries[alias] = entry
-            self.plugins[alias] = Plugin(alias, entry, places)
-        self.plugins['folder'] = FolderPlugin('folder', places)
+            self.plugins[alias] = Plugin(alias, entry)
+        self.plugins['folder'] = FolderPlugin('folder')
         module = importlib.import_module(selector)
         self.plugins['selector'] = module if callable(getattr(module, 'catalog', None)) else module.Plugin()
         self.plugins['collect'] = Collection(self.entries)
@@ -113,7 +110,7 @@ class Configuration:
                 print(notice, file=sys.stderr)
 
     def runner(self):
-        return Runner(self.plugins, policy=lambda resources: all(not self.bounds.hides(path) for path in resources))
+        return Runner(self.plugins)
 
     def recipe(self, operation, parameters, limit=None):
         if operation == 'recent':
@@ -144,12 +141,12 @@ class Configuration:
         return {'source': 'folder', 'locator': locator}
 
 
-def create_server(config_path, reader=None, selector='plugins.select_literal'):
+def create_server(config_path, selector='plugins.select_literal'):
     cfg = load_config(config_path)
 
     def configured():
         try:
-            return Configuration(cfg, reader, selector)
+            return Configuration(cfg, selector)
         except ValueError as error:
             raise ToolError(f'Invalid source configuration: {error}'[:1000]
                             + ' Fix the configuration file and restart the server.') from error
