@@ -84,8 +84,6 @@ class TimeBudgetTest(unittest.TestCase):
         self.assertIn('Nothing found', text)
 
 
-if __name__ == '__main__':
-    unittest.main()
 
 
 class SameTitleSourcesTest(unittest.TestCase):
@@ -120,3 +118,7 @@ class FolderBudgetTest(unittest.TestCase):
             self.assertIn('not finished within 60 s', render_search(found, ['lanternword'], 8, 8000,
                                                                       unfinished=recall.unfinished, budget=60))
             self.assertEqual(Recall({'sources': []}, reader=str(base)).search_folder(str(base), ['lanternword'])[0][1].__len__(), 4)
+
+
+if __name__ == '__main__':
+    unittest.main()
