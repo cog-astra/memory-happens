@@ -1,7 +1,5 @@
 # memory-happens
 
-> This fork is a working line for as long as the upstream repository has no reviewer: `main` follows upstream, `terra/main` carries the changes, and they are proposed back to upstream as pull requests.
-
 Your work already leaves a memory.
 
 Conversations, notes and Git history contain things you did not know you would need
