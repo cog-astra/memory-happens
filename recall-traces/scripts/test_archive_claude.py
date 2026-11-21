@@ -133,6 +133,24 @@ class ArchiveTests(unittest.TestCase):
         self.assertIn('later correction', self.corpus.read_text(encoding='utf-8'))
         self.assertEqual(self.run_archive()['unchanged'], 1)
 
+    def test_unknown_attachment_shapes_do_not_abort_archive(self):
+        attachments = [None, 'opaque', ['opaque'],
+                       {'type': 'queued_command', 'prompt': 7},
+                       {'type': 'queued_command', 'prompt': {'text': 'hidden'}},
+                       {'type': 'queued_command', 'prompt': [None, 7, 'hidden']},
+                       *({'type': 'queued_command', 'origin': origin, 'prompt': 'hidden'}
+                         for origin in (None, {}, 'human', ['human']))]
+        records = [{'type': 'attachment', 'attachment': a} for a in attachments]
+        self.path.write_bytes(''.join(json.dumps(r) + '\n' for r in records).encode('utf-8') + row('visible'))
+        self.path.with_name('z.jsonl').write_bytes(row('next session'))
+        report = self.run_archive()
+        self.assertEqual(report['errors'], [])
+        self.assertEqual(report['projected'], 2)
+        text = self.corpus.read_text(encoding='utf-8')
+        self.assertEqual(text.count('[user]'), 1)
+        self.assertIn('visible', text)
+        self.assertNotIn('hidden', text)
+
     def test_rewrite_keeps_original_revision(self):
         original = row('original')
         self.path.write_bytes(original)

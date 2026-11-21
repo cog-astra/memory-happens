@@ -12,12 +12,19 @@ def message_blocks(record, line_number):
     if record.get('isMeta'):
         return
     if record.get('type') == 'attachment':
-        attachment = record.get('attachment') or {}
+        attachment = record.get('attachment')
+        if not isinstance(attachment, dict):
+            return
+        origin = attachment.get('origin', {'kind': 'human'})
         if (attachment.get('type') != 'queued_command'
                 or attachment.get('commandMode', 'prompt') != 'prompt'
-                or (attachment.get('origin') or {}).get('kind', 'human') != 'human'):
+                or not isinstance(origin, dict) or origin.get('kind') != 'human'):
             return
         role, content = 'user', attachment.get('prompt')
+        if not isinstance(content, (str, list)):
+            return
+        if isinstance(content, list):
+            content = [item if isinstance(item, dict) else {} for item in content]
     elif record.get('type') in ('user', 'assistant'):
         message = record.get('message') or {}
         role, content = message.get('role'), message.get('content')
