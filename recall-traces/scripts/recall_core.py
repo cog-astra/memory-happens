@@ -65,6 +65,10 @@ def scan(path, words, stamp=None):
 
 class Source:
     title = ''
+    opt_in = False
+
+    def covers(self, where):
+        return False
 
     def __init__(self, options):
         self.options = options
@@ -122,6 +126,7 @@ class Recall:
         self.cfg = cfg if cfg is not None else load_config()
         self.plugins = load_plugins(self.cfg)
         self.bounds = Bounds(self.cfg.get('spaces', []), reader)
+        self.skipped = []
 
     def space_of(self, bound):
         if 'files' in bound:
@@ -131,6 +136,10 @@ class Recall:
         if 'project' in bound:
             return self.bounds.owner_of_project(bound['project'])
         return self.bounds.owner_of(bound.get('path'))
+
+    def searchable(self, repo):
+        opened = self.bounds.open_paths(repo)
+        return opened is None or bool(opened)
 
     def visible(self, bound):
         return self.space_of(bound) is None
@@ -144,11 +153,19 @@ class Recall:
     def search(self, words, since=None, where=None):
         return self.search_with_scope(words, since, where)[0]
 
-    def search_with_scope(self, words, since=None, where=None):
+    def search_with_scope(self, words, since=None, where=None, opt_in=True):
         found, outside_where = [], []
+        self.skipped = []
         for plugin in self.plugins:
             hits, outside = [], 0
-            for hit in plugin.search(words, since):
+            if plugin.opt_in:
+                if not (opt_in or plugin.covers(where)):
+                    self.skipped.append(plugin.title)
+                    continue
+                stream = plugin.search(words, since, where, self.searchable)
+            else:
+                stream = plugin.search(words, since)
+            for hit in stream:
                 if (since and hit['time'] < since) or not self.visible(hit['bound']):
                     continue
                 if mentions(hit['where'], where):

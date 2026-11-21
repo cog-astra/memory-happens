@@ -6,7 +6,7 @@ from pathlib import Path
 
 from concurrent.futures import ThreadPoolExecutor
 
-from recall_core import REPO_REV, Source, modified
+from recall_core import REPO_REV, Source, mentions, modified
 
 SKIP = {'node_modules', '.git', 'Library', 'Temp', 'venv', '.venv', '__pycache__', 'build', 'dist'}
 FOUND = {}
@@ -79,6 +79,10 @@ def across(found, work):
 
 class Plugin(Source):
     title = 'git'
+    opt_in = True
+
+    def covers(self, where):
+        return bool(where) and any(mentions(repo, where) for repo in repos(self.options))
 
     def recent(self, since):
         found = [repo for repo in repos(self.options) if active(repo, since)]
@@ -87,8 +91,9 @@ class Plugin(Source):
                    'group': f"git · {repo.as_posix()}", 'headline': f"{commit['rev']} {commit['subject']}",
                    'locator': f"{repo.as_posix()}@{commit['rev']}"}
 
-    def search(self, words, since):
-        found = [repo for repo in repos(self.options) if active(repo, since)]
+    def search(self, words, since, where=None, searchable=lambda repo: True):
+        found = [repo for repo in repos(self.options)
+                 if active(repo, since) and mentions(repo, where) and searchable(repo)]
         for repo, commit in across(found, lambda repo: commits(repo, since, words)):
             folded = commit['subject'].casefold()
             yield {'time': commit['time'], 'where': str(repo), 'bound': commit['bound'],

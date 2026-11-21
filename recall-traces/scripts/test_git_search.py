@@ -51,6 +51,8 @@ class GitSearchTest(unittest.IsolatedAsyncioTestCase):
                         arguments = {'query': query, 'characters': 20000}
                         if configured:
                             arguments['view'] = 'passages'
+                        else:
+                            arguments['git'] = True
                         reply = await session.call_tool('search', arguments)
                         self.assertFalse(reply.is_error, reply)
                         if configured:
@@ -85,7 +87,7 @@ class GitSearchTest(unittest.IsolatedAsyncioTestCase):
         self.config.write_text(json.dumps(cfg), encoding='utf-8')
         (self.repo / '.git' / 'HEAD').write_text('broken\n', encoding='utf-8')
         async with server(env={'RECALL_CONFIG': str(self.config)}) as session:
-            reply = await session.call_tool('search', {'query': 'tokenizer'})
+            reply = await session.call_tool('search', {'query': 'tokenizer', 'git': True})
             self.assertTrue(reply.is_error, reply)
         async with server('--sources', str(self.config)) as session:
             reply = await session.call_tool('operation_run', {
